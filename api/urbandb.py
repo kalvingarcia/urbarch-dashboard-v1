@@ -1,21 +1,26 @@
 import json
+from os import system
 import psycopg2 as postgres
-
-# Matching the info color of Kivy loading
-green_text = '\033[1;92m'
-default_text = '\033[0m'
+from color import bold_bright_red, bold_bright_green, default
 
 # "sessions/database-env.json"
 class UrbanDB:
     def __init__(self, env_file):
         try:
-            self.env = json.load(open(env_file, 'r'))
-            self.connection = postgres.connect(self.env["DB_URL"])
-            print(f"[{green_text}INFO{default_text}   ] [Postgres    ] Database connected successfully.")
-        except json.JSONDecodeError:
-            print(f"[{green_text}INFO{default_text}   ] [JSON        ] Error Decoding the database JSON file.")
-        except:
-            print(f"[{green_text}INFO{default_text}   ] [Postgres     ] Database not connected successfully.")
+            env = json.load(open(env_file, 'r'))
+            self.connection = postgres.connect(env["DB_URL"])
+            self.cursor = self.connection.cursor()
 
-    def create(self):
-        pass
+            # printing debug messages simiillar to kivy
+            print(f"[{bold_bright_green}INFO{default}   ] [Postgres    ] Database connected successfully.")
+        except json.JSONDecodeError:
+            print(f"[{bold_bright_red}ERROR{default}  ] [JSON         ] Error Decoding the database JSON file.")
+        except Exception as e:
+            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Database not connected successfully.")
+            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+
+    def close(self):
+        self.connection.close()
+
+    def commit(self):
+        self.connection.commit()
