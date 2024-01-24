@@ -24,3 +24,18 @@ class UrbanDB:
 
     def commit(self):
         self.connection.commit()
+
+    def create(self, table_name, **kwargs):
+        try:
+            columns = ", ".join([f"{key} {value}" for key, value in kwargs.items()])
+            self.cursor.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({columns});")
+        except Exception as e:
+            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not create table ({table_name}) in database.")
+            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+    
+    def drop(self, table_name):
+        try:
+            self.cursor.execute(f"DROP TABLE {table_name}")
+        except Exception as e:
+            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not drop table ({table_name}) in database.")
+            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
