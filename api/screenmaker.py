@@ -40,10 +40,6 @@ class ScreenMaker:
             class_name = "".join([word.title() for word in page_module_name.split('-')])
             cls = getattr(page_module, class_name)
             return cls()
-        except:
-            print(f"The module {page_module_name} did not contain a proper page class.")
-
-
-
-
-
+        except Exception as e:
+            print(f"[{bold_bright_red}ERROR{default}  ] [            ] {e}")
+            print(f"[{bold_bright_red}ERROR{default}  ] [ScreenMaker ] The module {page_module_name} did not contain a proper page class.")
