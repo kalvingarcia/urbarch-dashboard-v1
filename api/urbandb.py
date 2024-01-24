@@ -39,3 +39,27 @@ class UrbanDB:
         except Exception as e:
             print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not drop table ({table_name}) in database.")
             print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+
+    def insert(self, table_name, data):
+        try:
+            column_keys = ", ".join([key for key in data.keys()])
+            column_values = ", ".join([f"'{value}'" for value in data.values()])
+            self.cursor.execute(f"INSERT INTO {table_name} ({column_keys}) VALUES ({column_values});")
+        except Exception as e:
+            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not insert data into table ({table_name}).")
+            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+
+    def delete(self, table_name, id):
+        try:
+            self.cursor.execute(f"DELETE FROM {table_name} WHERE id='{id}'")
+        except Exception as e:
+            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not delete data from table ({table_name}).")
+            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+
+    def update(self, table_name, id, **kwargs):
+        try:
+            parameters = ", ".join([f"{key}='{value}'" for key, value in kwargs.items()])
+            self.cursor.execute(f"UPDATE {table_name} SET {parameters} WHERE id='{id}'")
+        except Exception as e:
+            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not update data from table ({table_name}) for object {id}.")
+            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
