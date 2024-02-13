@@ -1,10 +1,13 @@
+asyncgui==0.6.1
+asynckivy==0.6.2
 certifi==2023.11.17
 charset-normalizer==3.3.2
 docutils==0.20.1
 idna==3.6
 Kivy==2.3.0
 Kivy-Garden==0.1.5
-kivymd==1.1.1
+kivymd @ https://github.com/kivymd/KivyMD/archive/master.zip#sha256=af5dfdbcd9c915b415f4125cbe47d4e36aadf02eae63d54b1d0b15bcd0b73a9d
+materialyoucolor==2.0.5
 pillow==10.2.0
 psycopg2-binary==2.9.9
 Pygments==2.17.2
