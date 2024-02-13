@@ -1,147 +1,133 @@
 import json
 from os import system
-import psycopg2 as postgres
-from color import bold_bright_red, bold_bright_green, default
+from .pygres import PygreSQL
 
-# "sessions/database-env.json"
 class UrbanDB:
-    def __init__(self, env_file):
+    _pygres = None
+
+    @classmethod
+    def _error(cls):
+        cls._pygres.rollback()
+
+    @classmethod
+    def _complete_action(cls):
+        cls._pygres.commit()
+
+    @classmethod
+    def open_pygres(cls, env_file):
         try:
-            env = json.load(open(env_file, 'r'))
-            self.connection = postgres.connect(env["DB_URL"])
-            self.cursor = self.connection.cursor()
+            if cls._pygres is None:
+                env = json.load(open(env_file, 'r'))
+                cls._pygres = PygreSQL(*env.values())
+        except:
+            raise Exception()
 
-            # printing debug messages simiillar to kivy
-            print(f"[{bold_bright_green}INFO{default}   ] [Postgres    ] Database connected successfully.")
-        except json.JSONDecodeError:
-            print(f"[{bold_bright_red}ERROR{default}  ] [JSON         ] Error Decoding the database JSON file.")
-        except Exception as e:
-            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Database not connected successfully.")
-            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+    @classmethod
+    def initialize_database(cls):
+        cls._pygres.create("product_listing", {
+            "id": "VARCHAR(7)",
+            "name": "VARCHAR(255)",
+            "description": "TEXT"
+        }, primary_key = ["id"], index = ["id", "name", "description"])
+        cls._pygres.create("product_variations", {
+            "extension": "VARCHAR(10)",
+            "subname": "VARCHAR(255)",
+            "price": "INT",
+            "display": "BOOL",
+            "overview": "JSONB",
+            "listing_id": "VARCHAR(7)"
+        }, foreign_key = {"listing_id": "product_listing(id)"}, index = ["subname"])
 
-    def close(self):
-        self.connection.close()
+        cls._pygres.create("instock_listing", {
+            "id": "VARCHAR(7)",
+            "name": "VARCHAR(255)",
+            "description": "TEXT",
+            "product_id": "VARCHAR(7)"
+        }, primary_key = ["id"], foreign_key = {"product_id": "product_listing(id)"}, index = ["id", "name", "description"])
+        cls._pygres.create("instock_items", {
+            "serial": "INT",
+            "overstock": "BOOL",
+            "price": "INT",
+            "display": "BOOL",
+            "overview": "JSONB",
+            "listing_id": "VARCHAR(7)"
+        }, primary_key = ["serial"], foreign_key = {"listing_id": "instock_listing(id)"})
 
-    def commit(self):
-        self.connection.commit()
+        cls._pygres.create("salvage_listing", {
+            "id": "VARCHAR(7)",
+            "name": "VARCHAR(255)",
+            "description": "TEXT",
+            "price": "INT",
+            "display": "BOOL",
+            "overview": "JSONB"
+        }, primary_key = ["id"], index = ["id", "name", "description"])
 
-    def create(self, table_name, **kwargs):
-        try:
-            columns = ", ".join([f"{key} {value}" for key, value in kwargs.items()])
-            self.cursor.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({columns});")
-        except Exception as e:
-            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not create table ({table_name}) in database.")
-            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
-    
-    def drop(self, table_name):
-        try:
-            self.cursor.execute(f"DROP TABLE {table_name}")
-        except Exception as e:
-            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not drop table ({table_name}) in database.")
-            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+        # cls._pygres.create("tag_categories", {
+        #     "id": "INT(10) SERIAL",
+        #     "name": "VARCHAR(255)"
+        # }, primary_key = ["id"])
+        # cls._pygres.create("tag", {
+        #     "id": "INT(10) SERIAL",
+        #     "name": "VARCHAR(255)",
+        #     "category_id": "INT(10)"
+        # }, primary_key = ["id"], foreign_key = {"category_id": "tag_categories('id')"})
+        # cls._pygres.create("product_listing__tag", {
+        #     "listing_id": "VARCHAR(7)",
+        #     "tag_id": "INT(10)"
+        # }, foreign_key = {"listing_id": "product_listing('id')", "tag_id": "tag('id')"})
+        # cls._pygres.create("instock_listing__tag", {
+        #     "listing_id": "VARCHAR(7)",
+        #     "tag_id": "INT(10)"
+        # }, foreign_key = {"listing_id": "instock_listing('id')", "tag_id": "tag('id')"})
+        # cls._pygres.create("salvage_listing__tag", {
+        #     "listing_id": "VARCHAR(7)",
+        #     "tag_id": "INT(10)"
+        # }, foreign_key = {"listing_id": "salvage_listing('id')", "tag_id": "tag('id')"})
 
-    def insert(self, table_name, data):
-        try:
-            column_keys = ", ".join([key for key in data.keys()])
-            column_values = ", ".join([f"'{value}'" for value in data.values()])
-            self.cursor.execute(f"INSERT INTO {table_name} ({column_keys}) VALUES ({column_values});")
-        except Exception as e:
-            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not insert data into table ({table_name}).")
-            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+        # cls._pygres.create("blog_post__tag", {
+        #     "post_id": "INT(10)",
+        #     "tag_id": "INT(10)"
+        # }, foreign_key = {"post_id": "blog_post('id')", "tag_id": "tag('id')"})
 
-    def delete(self, table_name, id):
-        try:
-            self.cursor.execute(f"DELETE FROM {table_name} WHERE id='{id}'")
-        except Exception as e:
-            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not delete data from table ({table_name}).")
-            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+    @classmethod
+    def get_tag_list(cls):
+        pass
 
-    def update(self, table_name, id, **kwargs):
-        try:
-            parameters = ", ".join([f"{key}='{value}'" for key, value in kwargs.items()])
-            self.cursor.execute(f"UPDATE {table_name} SET {parameters} WHERE id='{id}'")
-        except Exception as e:
-            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not update data from table ({table_name}) for object {id}.")
-            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+    @classmethod
+    def get_product_list(cls, filter_ids: list = None):
+        return cls._pygres.select("product_listing")
 
-    def print_table(self, table_name):
-        try:
-            self.cursor.execute(f"SELECT * FROM {table_name}")
-            rows = self.cursor.fetchall()
-            for row in rows:
-                print('\t\t'.join(row))
-        except Exception as e:
-            print(f"[{bold_bright_red}ERROR{default}  ] [Postgres     ] Could not print data from table ({table_name}).")
-            print(f"[{bold_bright_red}ERROR{default}  ] [             ] {e}.")
+    @classmethod
+    def get_product(cls, id):
+        result = cls._pygres.select("product_listing", where = f"id = '{id}'")[0]
+        result["variations"] = cls._pygres.select("product_variations", where = f"listing_id = '{id}'")
+        return result
 
-if __name__ == "__main__":
-    def menu():
-        print("1. ADD PRODUCTS")
-        print("2. DELETE PRODUCTS")
-        print("3. UPDATE PRODUCT")
-        print("4. RESET DATABASE")
-        print("5. PRINT DATABASE")
-        print("6. COMMIT TO DATABASE")
-        print("Q. QUIT")
-        return input("CHOICE: ")
+    @classmethod
+    def create_product(cls, data):
+        variations = data.pop("variations")
+        cls._pygres.insert("product_listing", data)
+        for variation in variations:
+            variation['listing_id'] = data['id']
+            cls._pygres.insert("product_variations", variation)
 
-    def keep_going():
-        choice = input("Keep going? (Y / N): ")
-        if choice.upper() == 'Y':
-            return 0
+    @classmethod
+    def update_product(cls, id, data):
+        cls._pygres.update("product_listing", data, where = f"id = '{id}'")
 
-    def confirm():
-        choice = input("Are you sure? (Y / N): ")
-        if choice.upper() == 'Y':
-            return 0
+    @classmethod
+    def update_variation(cls, id, data):
+        cls._pygres.update("product_variation", data, where = f"id = '{id}'")
 
-    def commit():
-        choice = input("Commit changes? (Y / N): ")
-        if choice.upper() == 'Y':
-            return 0
+    @classmethod
+    def delete_product(cls, id):
+        cls._pygres.delete("product_listing", where = f"id = '{id}'")        
 
-    urb = UrbanDB("sessions/database-env.json")
+    @classmethod
+    def delete_variation(cls, id):
+        cls._pygres.delete("product_variation", where = f"id = '{id}'")
 
-    quit = False
-    while not quit:
-        choice = menu()
-        if choice == '1':
-            while keep_going() is not None:
-                prod_json = {}
+    @classmethod
+    def close_pygres(cls):
+        cls._pygres.close()
 
-                prod_json["id"] = input("Enter the product UA ID: ")
-                prod_json["name"] = input("Enter the product name: ")
-                prod_json["url"] = input("Enter the product URL: ")
-
-                urb.insert("small_search", prod_json)
-        elif choice == '2':
-            while keep_going() is not None:
-                id = input("Enter the product UA ID: ")
-                urb.delete("small_search", id)
-        elif choice == '3':
-            prod_json = {}
-
-            prod_json["id"] = input("Enter the product UA ID: ")
-            prod_json["name"] = input("Enter the new product name: ")
-            prod_json["url"] = input("Enter the new product URL: ")
-
-            urb.update("small_search", prod_json["id"], name=prod_json["name"], url=prod_json["url"])
-
-            keep_going()
-        elif choice == '4' and confirm() is not None:
-            urb.drop("small_search")
-            urb.create("small_search", id="TEXT UNIQUE", name="TEXT", url="TEXT")
-        elif choice == '5':
-            urb.print_table("small_search")
-            keep_going()
-        elif choice == '6' and confirm is not None:
-            urb.commit()
-        elif choice.upper() == 'Q':
-            if commit() is not None:
-                urb.commit()
-            urb.close()
-            quit = True
-        else:
-            print(print(f"[{bold_bright_red}ERROR{default}  ] [UrbanDB      ] Option invalid please try again."))
-
-        system("clear")
