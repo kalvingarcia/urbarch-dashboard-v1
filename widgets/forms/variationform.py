@@ -3,6 +3,7 @@ from kivy.clock import Clock
 from kivymd.uix.tab import MDTabsPrimary, MDTabsItem, MDTabsItemText
 from kivymd.uix.textfield import MDTextFieldHintText, MDTextFieldHelperText, MDTextFieldLeadingIcon
 from .form import FormStructure, Form, TextInput, SwitchInput, CheckboxInput, CheckGroup
+from .overviewform import TagForm
 
 class VariationFormTab(MDTabsItem):
     def __init__(self, tab_name, **kwargs):
@@ -62,6 +63,7 @@ class VariationFormSlide(Form):
                 CheckboxInput("Wet Environments", value = "Wet", group = "UL"),
                 CheckboxInput("None", group = "UL")
             ),
+            TagForm(form_id = "test"),
             orientation = "vertical",
             size_hint_x = 0.5
         ))
@@ -87,7 +89,7 @@ class VariationForm(MDTabsPrimary, FormStructure):
         # creating the content structure
         self.__content = MDTabsCarousel(
             size_hint_y = None,
-            height = '200dp'
+            height = '600dp'
         )
         self.add_widget(self.__content)
 
