@@ -2,7 +2,7 @@ import os
 import sys
 import inspect
 from importlib import import_module
-from kivymd.uix.screenmanager import MDScreenManager as ScreenManager
+from kivymd.uix.screenmanager import MDScreenManager
 
 # This is how far back in the stack '_get_caller_location' must look
 # _get_caller_location() -> __init__() -> __new__() -> ScreenMaker()
@@ -13,7 +13,7 @@ BACK_TRACE = 3
 # Then the ScreenMaker creates the screen manager and each page
 class ScreenMaker:
     def __init__(self):
-        self.manager = ScreenManager()
+        self.manager = MDScreenManager()
 
         # looking for the pages directory
         directory = self._get_caller_location() + "/pages"
