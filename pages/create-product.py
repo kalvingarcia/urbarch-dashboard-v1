@@ -5,6 +5,7 @@ from api.urbandb import UrbanDB
 from widgets.forms.form import Form
 from widgets.forms.productform import ProductForm
 from widgets.forms.variationform import VariationForm
+from api.makr import screen_unit
 
 class CreateProduct(Screen):
     def __init__(self, **kwargs):
@@ -15,7 +16,7 @@ class CreateProduct(Screen):
         self.creation_form = Form(
                 ProductForm(),
                 variation_form,
-                orientation = "vertical"
+                orientation = "vertical",
         )
 
         add_tab_button = MDButton(
@@ -39,10 +40,19 @@ class CreateProduct(Screen):
 
         self.add_widget(MDBoxLayout(
             self.creation_form,
-            add_tab_button,
-            remove_tab_button,
-            submit_button,
-            orientation = "vertical"
+            MDBoxLayout(
+                MDBoxLayout(
+                    add_tab_button,
+                    remove_tab_button,
+                    adaptive_height = True,
+                    size_hint_x = 0.5
+                ),
+                submit_button,
+                padding = ['20dp'],
+                adaptive_height = True,
+            ),
+            orientation = "vertical",
+            adaptive_height = True,
         ))
 
     def _send_product(self, *args):
