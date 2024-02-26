@@ -2,7 +2,12 @@ import os
 import sys
 import inspect
 from importlib import import_module
+from kivy.core.window import Window
 from kivymd.uix.screenmanager import MDScreenManager
+
+
+def screen_unit():
+    return Window.size[0] / 100, Window.size[1] / 100
 
 # This is how far back in the stack '_get_caller_location' must look
 # _get_caller_location() -> __init__() -> __new__() -> ScreenMaker()
@@ -11,7 +16,7 @@ BACK_TRACE = 3
 # This is the ScreenMaker class API, where the Kivy Screens are created for the screen manager.
 # Ideally, the class finds the pages subdirectory in the same place as the caller's directory.
 # Then the ScreenMaker creates the screen manager and each page
-class ScreenMaker:
+class Makr:
     def __init__(self):
         self.manager = MDScreenManager()
 

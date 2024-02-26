@@ -1,7 +1,7 @@
 from kivy.core.window import Window
 from kivymd.app import MDApp as App
 
-from api.screenmaker import ScreenMaker
+from api.makr import Makr
 from api.urbandb import UrbanDB
 
 class UrbanDashApp(App):
@@ -22,7 +22,7 @@ class UrbanDashApp(App):
 
     def build(self):
         self.title = "Urban Dash"
-        return ScreenMaker()
+        return Makr()
 
     def on_request_close(self, *args):
         UrbanDB.close_pygres()
