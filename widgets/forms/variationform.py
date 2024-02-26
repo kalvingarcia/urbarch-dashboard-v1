@@ -2,8 +2,10 @@ import re
 from kivy.clock import Clock
 from kivymd.uix.tab import MDTabsPrimary, MDTabsItem, MDTabsItemText
 from kivymd.uix.textfield import MDTextFieldHintText, MDTextFieldHelperText, MDTextFieldLeadingIcon
+from kivymd.uix.scrollview import MDScrollView
 from .form import FormStructure, Form, TextInput, SwitchInput, CheckboxInput, CheckGroup
 from .overviewform import TagForm
+from api.makr import screen_unit
 
 class VariationFormTab(MDTabsItem):
     def __init__(self, tab_name, **kwargs):
@@ -25,48 +27,64 @@ class VariationFormTab(MDTabsItem):
             self.width = self.text.texture_size[0] + self.text.padding_x + 2
 
         if not self._tabs.allow_stretch and isinstance(self.text, MDTabsItemText):
-            Clock.schedule_once(set_width) # i'm assuming it is scheduled to delay the width until after the textture updates
+            Clock.schedule_once(set_width) # i'm assuming it is scheduled to delay the width until after the texture updates
 
-class VariationFormSlide(Form):
-    def __init__(self, **kwargs):
-        super(VariationFormSlide, self).__init__(**kwargs)
-        self.orientation = "horizontal"
+class VariationFormSlide(FormStructure, MDScrollView):
+    def __init__(self, variation_number, *args, **kwargs):
+        super(VariationFormSlide, self).__init__(*args, **kwargs)
 
-        self.add_widget(Form(
-            TextInput(
-                MDTextFieldHintText(text = "Variant Name"),
-                MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"ADA\""),
-                on_text_change = self.rename_tab,
-                # size_hint_x = 0.6,
-                form_id = "subname"
+        self.__form = Form(
+            Form(
+                TextInput(
+                    MDTextFieldHintText(text = "Variant Name"),
+                    MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"ADA\""),
+                    on_text_change = self.rename_tab,
+                    form_id = "subname",
+                    size_hint_y = None
+                ),
+                TextInput(
+                    MDTextFieldHintText(text = "Variation Extension"),
+                    MDTextFieldHelperText(text = "Example: for \"UA0040-A\", it would be \"A\""),
+                    form_id = "extension",
+                    size_hint_y = None
+                ),
+                TextInput(
+                    MDTextFieldLeadingIcon(icon = "currency-usd"),
+                    MDTextFieldHintText(text = "Variation Base Price"),
+                    MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"1095\""),
+                    form_id = "price",
+                    size_hint_y = None
+                ),
+                CheckGroup(
+                    CheckboxInput("Dry Environments", value = "Dry", group = f"UL_{variation_number}", adaptive_height = True),
+                    CheckboxInput("Wet Environments", value = "Wet", group = f"UL_{variation_number}",  adaptive_height = True),
+                    CheckboxInput("None", group = f"UL_{variation_number}", active = True,  adaptive_height = True),
+                    form_id = "overview",
+                    size_hint_y = None,
+                    adaptive_height = True
+                ),
+                SwitchInput("Display", form_id = "display"),
+                orientation = "vertical",
+                size_hint_x = 0.5,
+                adaptive_height = True
             ),
-            TextInput(
-                MDTextFieldHintText(text = "Variation Extension"),
-                MDTextFieldHelperText(text = "Example: for \"UA0040-A\", it would be \"A\""),
-                # size_hint_x = 0.4,
-                form_id = "extension"
+            Form(
+                TagForm(form_id = "tags"),
+                orientation = "vertical",
+                size_hint_x = 0.5,
+                adaptive_height = True
             ),
-            TextInput(
-                MDTextFieldLeadingIcon(icon = "currency-usd"),
-                MDTextFieldHintText(text = "Variation Base Price"),
-                MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"1095\""),
-                form_id = "price"
-            ),
-            orientation = "vertical",
-            size_hint_x = 0.5
-        ))
-        self.add_widget(Form(
-            SwitchInput("Display", form_id = "display"),
-            CheckGroup(
-                "UL Listing",
-                CheckboxInput("Dry Environments", value = "Dry", group = "UL"),
-                CheckboxInput("Wet Environments", value = "Wet", group = "UL"),
-                CheckboxInput("None", group = "UL")
-            ),
-            TagForm(form_id = "test"),
-            orientation = "vertical",
-            size_hint_x = 0.5
-        ))
+            orientation = "horizontal",
+            adaptive_height = True,
+            padding = ['20dp'],
+        )
+        self.add_widget(self.__form)
+
+    def prefill(self, data):
+        self.__form.prefill(data)
+
+    def submit(self):
+        return "__variation", self.__form.submit()[1]
 
     def rename_tab(self, text):
         if hasattr(self, "tab_item"):
@@ -89,7 +107,7 @@ class VariationForm(MDTabsPrimary, FormStructure):
         # creating the content structure
         self.__content = MDTabsCarousel(
             size_hint_y = None,
-            height = '600dp'
+            height = 90 * screen_unit()[1]
         )
         self.add_widget(self.__content)
 
@@ -98,7 +116,6 @@ class VariationForm(MDTabsPrimary, FormStructure):
 
     def prefill(self, variations):
         for variation in variations:
-            print(variation)
             self.add_tab(variation)
 
     def submit(self):
@@ -110,7 +127,7 @@ class VariationForm(MDTabsPrimary, FormStructure):
     def add_tab(self, data = None):
         tab = VariationFormTab(f"Variantion {self.__variation_number}")
         self.add_widget(tab)
-        slide = VariationFormSlide()
+        slide = VariationFormSlide(self.__variation_number)
         self.__content.add_widget(slide)
         
         # if data is None then that means we aren't prefilling,
