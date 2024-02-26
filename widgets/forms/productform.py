@@ -1,5 +1,6 @@
 from kivymd.uix.textfield import MDTextFieldHelperText, MDTextFieldHintText
 from .form import Form, TextInput
+from api.makr import screen_unit
 
 class ProductForm(Form):
     def __init__(self, **kwargs):
@@ -23,7 +24,7 @@ class ProductForm(Form):
         self.add_widget(TextInput(
             MDTextFieldHintText(text = "Product Desctiption"),
             MDTextFieldHelperText(text = "This is not the product overview"),
-            # multiline = True,
-            # max_height = '200dp',
             form_id = "description"
         ))
+
+        self.adaptive_height = True
