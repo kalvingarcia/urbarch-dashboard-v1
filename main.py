@@ -1,20 +1,20 @@
 from kivy.core.window import Window
-from kivymd.app import MDApp as App
+from kivymd.app import MDApp
+from api.kavy.colors import Colors
+from api.appbuilder import AppBuilder
+from api.database import Database
 
-from api.makr import Makr
-from api.urbandb import UrbanDB
-
-class UrbanDashApp(App):
+class DashApp(MDApp):
     def __init__(self, **kwargs):
-        super(UrbanDashApp, self).__init__(**kwargs)
+        super(DashApp, self).__init__(**kwargs)
 
         # initializing the database connection
-        UrbanDB.open_pygres("./sessions/database-env.json")
-        UrbanDB.initialize_database()
+        Database.connect("./sessions/database-env.json")
 
-        # theming the dash
+        # theming dash
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Blue"
+        self.theme_cls.set_colors()
 
         # binding the close function
         Window.bind(on_request_close = self.on_request_close)
@@ -22,11 +22,11 @@ class UrbanDashApp(App):
 
     def build(self):
         self.title = "Urban Dash"
-        return Makr()
+        return AppBuilder()
 
     def on_request_close(self, *args):
-        UrbanDB.close_pygres()
+        Database.disconnect()
         self.stop()
 
 if __name__ == "__main__":
-    UrbanDashApp().run()
+    DashApp().run()
