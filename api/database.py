@@ -10,7 +10,7 @@ from .pygres import PygreSQL, FetchError, QueryError, CommitError, RollbackError
 word_list = set(words.words() + brown.words())
 pattern = re.compile(r"^\*.+\*$")
 
-class UrbanDB:
+class Database:
     _pygres = None
 
     @classmethod
@@ -22,7 +22,7 @@ class UrbanDB:
         cls._pygres.commit()
 
     @classmethod
-    def open_pygres(cls, env_file):
+    def connect(cls, env_file):
         try:
             if cls._pygres is None:
                 env = json.load(open(env_file, 'r'))
@@ -31,8 +31,37 @@ class UrbanDB:
             raise Exception()
 
     @classmethod
-    def initialize_database(cls):
+    def reset(cls):
+        for table in ["finishes", "product_listing", "product_variations", "instock_listing", "instock_items", "salvage_listing", "salvage_items",
+            "custom_items",
+            "tag_categories", "tag", "product_variation__tag", "instock_listing__tag", "salvage_listing__tag", "custom_items__tag"]:
+            cls._pygres.drop(table, cascade = True)
+
+    @classmethod
+    def initialize(cls):
         cls._pygres.extend("pg_trgm")
+
+        # Product Related Tables
+        cls._pygres.create("finishes", {
+            "id": "VARCHAR(5)",
+            "name": "VARCHAR(255)",
+            "outdoor": "BOOL"
+        })
+        finishes = [
+            {"id": "PB", "name": "Polished Brass", "outdoor": "YES"},
+            {"id": "PN", "name": "Polished Nickel", "outdoor": "YES"},
+            {"id": "GP", "name": "Green Patina", "outdoor": "YES"},
+            {"id": "BP", "name": "Brown Patina", "outdoor": "YES"},
+            {"id": "AB", "name": "Antique Brass", "outdoor": "YES"},
+            {"id": "SN", "name": "Satin Nickel", "outdoor": "YES"},
+            {"id": "LP", "name": "Light Pewter", "outdoor": "YES"},
+            {"id": "STBR", "name": "Statuary Brown", "outdoor": "NO"},
+            {"id": "STBL", "name": "Statuary Black", "outdoor": "NO"},
+            {"id": "PC", "name": "Polished Chrome", "outdoor": "YES"},
+            {"id": "BN", "name": "Black Nickel", "outdoor": "YES"}
+        ]
+        for finish in finishes:
+            cls._pygres.insert("finishes", finish)
 
         cls._pygres.create("product_listing", {
             "id": "VARCHAR(7)",
@@ -50,32 +79,47 @@ class UrbanDB:
         }, foreign_key = {"listing_id": "product_listing(id)"})
         cls._pygres.gin("product_variations", columns = ["subname"])
 
-        # cls._pygres.create("instock_listing", {
-        #     "id": "VARCHAR(7)",
-        #     "name": "VARCHAR(255)",
-        #     "description": "TEXT",
-        #     "product_id": "VARCHAR(7)"
-        # }, primary_key = ["id"], foreign_key = {"product_id": "product_listing(id)"})
-        # cls._pygres.gin("instock_listing", columns = ["id", "name", "description"])
-        # cls._pygres.create("instock_items", {
-        #     "serial": "INT",
-        #     "overstock": "BOOL",
-        #     "price": "INT",
-        #     "display": "BOOL",
-        #     "overview": "JSONB",
-        #     "listing_id": "VARCHAR(7)"
-        # }, primary_key = ["serial"], foreign_key = {"listing_id": "instock_listing(id)"})
+        cls._pygres.create("instock_listing", {
+            "id": "SERIAL",
+            "sale": "BOOL",
+            "price": "INT",
+            "product_id": "VARCHAR(7)",
+            "variation_extension": "VARCHAR(10)"
+        }, primary_key = ["id"], foreign_key = {"product_id": "product_listing(id)"})
+        cls._pygres.create("instock_items", {
+            "serial": "INT",
+            "display": "BOOL",
+            "overview": "JSONB",
+            "listing_id": "INT"
+        }, foreign_key = {"listing_id": "instock_listing(id)"})
 
-        # cls._pygres.create("salvage_listing", {
-        #     "id": "VARCHAR(7)",
-        #     "name": "VARCHAR(255)",
-        #     "description": "TEXT",
-        #     "price": "INT",
-        #     "display": "BOOL",
-        #     "overview": "JSONB"
-        # }, primary_key = ["id"])
-        # cls._pygres.gin("salvage_listing", columns = ["id", "name", "description"])
+        cls._pygres.create("salvage_listing", {
+            "id": "VARCHAR(7)",
+            "name": "VARCHAR(255)",
+            "description": "TEXT",
+        }, primary_key = ["id"])
+        cls._pygres.gin("salvage_listing", columns = ["id", "name", "description"])
+        cls._pygres.create("salvage_items", {
+            "serial": "INT",
+            "price": "INT",
+            "display": "BOOL",
+            "overview": "JSONB",
+            "listing_id": "VARCHAR(7)"
+        }, foreign_key = {"listing_id": "salvage_listing(id)"})
 
+        # Gallery Related Tables
+        cls._pygres.create("custom_items", {
+            "id": "SERIAL",
+            "name": "VARCHAR(255)",
+            "description": "TEXT",
+            "customer": "VARCHAR(255)",
+            "display": "BOOL",
+            "product_id": "VARCHAR(7)",
+            "variation_extension": "VARCHAR(10)"
+        }, primary_key = ["id"], foreign_key = {"product_id": "product_listing(id)"})
+        cls._pygres.gin("custom_items", columns = ["name", "description", "customer", "product_id"])
+
+        # Tag Related Tables
         cls._pygres.create("tag_categories", {
             "id": "SERIAL",
             "name": "VARCHAR(255)",
@@ -88,7 +132,7 @@ class UrbanDB:
             {"name": "Family", "description": "The stuctural grouping of the item, such as \"torch\" for Loft Light, Urban Torch, etc."},
             {"name": "Designer", "description": "The name of the designer who created the piece."},
             {"name": "Material", "description": "The type of materials used to create the item, such as alabaster, marble, aluminum, brass, etc."},
-            {"name": "Distiction", "description": "Specifically for lighting used to distinguish exterior and interior."},
+            {"name": "Distinction", "description": "Specifically for lighting used to distinguish exterior and interior."},
             {"name": "Environmental", "description": "Specifies any environmental conditions the item can be used in, such as waterproof."}
         ]
         for category in categories:
@@ -106,19 +150,20 @@ class UrbanDB:
             "variation_extension": "VARCHAR(10)",
             "tag_id": "INT"
         }, foreign_key = {"listing_id": "product_listing(id)", "tag_id": "tag(id)"})
-        # cls._pygres.create("instock_listing__tag", {
-        #     "listing_id": "VARCHAR(7)",
-        #     "tag_id": "INT(10)"
-        # }, foreign_key = {"listing_id": "instock_listing('id')", "tag_id": "tag('id')"})
-        # cls._pygres.create("salvage_listing__tag", {
-        #     "listing_id": "VARCHAR(7)",
-        #     "tag_id": "INT(10)"
-        # }, foreign_key = {"listing_id": "salvage_listing('id')", "tag_id": "tag('id')"})
+        cls._pygres.create("instock_listing__tag", {
+            "listing_id": "INT",
+            "tag_id": "INT"
+        }, foreign_key = {"listing_id": "instock_listing(id)", "tag_id": "tag(id)"})
+        cls._pygres.create("salvage_listing__tag", {
+            "listing_id": "VARCHAR(7)",
+            "tag_id": "INT"
+        }, foreign_key = {"listing_id": "salvage_listing(id)", "tag_id": "tag(id)"})
+        cls._pygres.create("custom_items__tag", {
+            "item_id": "INT",
+            "tag_id": "INT"
+        }, foreign_key = {"item_id": "custom_items(id)", "tag_id": "tag(id)"})
 
-        # cls._pygres.create("blog_post__tag", {
-        #     "post_id": "INT(10)",
-        #     "tag_id": "INT(10)"
-        # }, foreign_key = {"post_id": "blog_post('id')", "tag_id": "tag('id')"})
+        cls._pygres.commit()
 
     @classmethod
     def __expand_query(cls, query):
@@ -179,6 +224,29 @@ class UrbanDB:
             return []
 
     @classmethod
+    def search_components(cls, text: str):
+        try:
+            component_tag_id = cls._pygres.select("tag", where = f"name = 'component'")["id"]
+            if text == "":
+                variations_by_tag = cls._pygres.select("product_vatiation__tag", where = f"tag_id = {component_tag_id}")
+                where = " OR ".join([f"id = {variation["listing_id"]}" for variation in variations_by_tag])
+                return cls._pygres.select("product_listing", where = where)
+            
+            return []
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._pygres.rollback()
+            return []
+
+    @classmethod
+    def get_metal_finishes_list(cls):
+        return cls._pygres.select("finishes")
+
+    @classmethod
+    def get_tag_list(cls):
+        return cls._pygres.select("tag")
+
+    @classmethod
     def get_tag(cls, id):
         return cls._pygres.select("tag", where = f"id = '{id}'")
 
@@ -190,6 +258,7 @@ class UrbanDB:
     def create_tag(cls, data):
         cls._pygres.insert("tag", data)
         cls._pygres.regin("tag", columns = ["name"])
+        cls._pygres.commit()
 
     @classmethod
     def get_product_list(cls, filter_ids: list = None):
@@ -203,8 +272,10 @@ class UrbanDB:
             variation["tags"] = [product_tag["tag_id"] for product_tag in cls._pygres.select(
                 "product_variation__tag",
                 columns = ["tag_id"],
+                distinct = True,
                 where = f"listing_id = '{id}' AND variation_extension = '{variation["extension"]}'"
             )]
+        print(result)
         return result
 
     @classmethod
@@ -229,6 +300,8 @@ class UrbanDB:
                         "variation_extension": variation['extension'],
                         "tag_id": tag
                     })
+
+            cls._pygres.commit()
         except QueryError as error:
             print("Error while attempting to create product: ", error)
             cls._pygres.rollback()
@@ -236,11 +309,53 @@ class UrbanDB:
 
     @classmethod
     def update_product(cls, id, data):
-        cls._pygres.update("product_listing", data, where = f"id = '{id}'")
+        try:
+            variations = data.pop("variations")
 
-    @classmethod
-    def update_variation(cls, id, data):
-        cls._pygres.update("product_variation", data, where = f"id = '{id}'")
+            cls._pygres.update("product_listing", data, where = f"id = '{id}'")
+            cls._pygres.regin("product_listing", columns = ["id", "name", "description"])
+
+            extensions = set()
+            for variation in variations:
+                tags = variation.pop("tags")
+                extensions.add(variation["extension"])
+
+                variation['listing_id'] = data['id']
+                variation["overview"] = json.dumps(variation["overview"])
+
+                where = f"listing_id = '{data["id"]}' AND extension = '{variation["extension"]}'"
+                print(length := len(cls._pygres.select("product_variations", where = where)))
+                if length == 0:
+                    cls._pygres.insert("product_variations", variation)
+                else:
+                    cls._pygres.update("product_variations", variation, where = where)
+
+                cls._pygres.regin("product_variations", columns = ["subname"])
+
+                for tag in tags:
+                    where = f"listing_id = '{data['id']}' AND variation_extension = '{variation['extension']}' AND tag_id = '{tag}'"
+                    if len(cls._pygres.select("product_variation__tag", where = where)) == 0:
+                        cls._pygres.insert("product_variation__tag", {
+                            "listing_id": data['id'],
+                            "variation_extension": variation['extension'],
+                            "tag_id": tag
+                        })
+
+            # clean up if extensions get updated
+            # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
+            # but i like to make things hard i guess
+            for variation in cls._pygres.select("product_variations", where = f"listing_id = '{data["id"]}'"):
+                if variation["extension"] not in extensions:
+                    cls._pygres.delete("product_variations", where = f"listing_id = '{variation["listing_id"]}' AND extension = '{variation["extension"]}'")
+            for tag in cls._pygres.select("product_variation__tag", where = f"listing_id = '{data["id"]}'"):
+                if tag["variation_extension"] not in extensions:
+                    cls._pygres.delete("product_variation__tag", where = f"listing_id = '{tag["listing_id"]}' AND variation_extension = '{tag["variation_extension"]}' AND tag_id = '{tag["tag_id"]}'")
+
+            cls._pygres.commit()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._pygres.rollback()
+            return error
 
     @classmethod
     def delete_product(cls, id):
@@ -251,6 +366,5 @@ class UrbanDB:
         cls._pygres.delete("product_variation", where = f"id = '{id}'")
 
     @classmethod
-    def close_pygres(cls):
+    def disconnect(cls):
         cls._pygres.close()
-
