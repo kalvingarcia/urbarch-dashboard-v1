@@ -53,7 +53,7 @@ class PygreSQL:
         # the default lambda function for the dictionary comprehension
         check_default = lambda key, value: value + f" DEFAULT {default[key]}" if default is not None and key in default.keys() else value
         # the foreign key lambda function for the dictionary comprehension
-        check_foreign_key = lambda key, value: value + f" REFERENCES {foreign_key[key]}" if foreign_key is not None and key in foreign_key.keys() else value
+        check_foreign_key = lambda key, value: value + f" REFERENCES {foreign_key[key]} ON DELETE CASCADE ON UPDATE CASCADE" if foreign_key is not None and key in foreign_key.keys() else value
 
         # updating the values based on the lambda functions checks
         columns = {key: check_foreign_key(key, check_default(key, value)) for key, value in columns.items()}
@@ -153,7 +153,7 @@ class PygreSQL:
     # the where clause is optional and can be used to filter results
     def update(self, table, set: dict, where: str = None):
         parameters = ", ".join([f"{key}='{value}'" for key, value in set.items()])
-        self(f"UPDATE {table_name} SET {parameters};" if where is None else f"UPDATE {table_name} SET {parameters} WHERE {where};")
+        self(f"UPDATE {table} SET {parameters};" if where is None else f"UPDATE {table} SET {parameters} WHERE {where};")
 
     # this function is used to delete data from the table
     # if no condition is provided, then all data is deleted
