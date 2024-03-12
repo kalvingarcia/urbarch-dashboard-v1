@@ -1,30 +1,249 @@
-from kivymd.uix.textfield import MDTextFieldHelperText, MDTextFieldHintText
-from .form import Form, TextInput
-from api.makr import screen_unit
+from kivymd.theming import ThemableBehavior
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.scrollview import MDScrollView
+from kivymd.uix.label import MDLabel
+from kivymd.uix.textfield import MDTextFieldHelperText, MDTextFieldHintText, MDTextFieldLeadingIcon
+from kivymd.uix.button import MDIconButton
+from api.database import Database
+from widgets.forms.form import FormStructure, Form, TextInput, CheckboxInput, CheckGroup, SwitchInput, TabForm
+from widgets.forms.overviewforms import ReplacementForm, TagForm, FinishesForm, OptionsForm
 
-class ProductForm(Form):
-    def __init__(self, **kwargs):
-        super(ProductForm, self).__init__(**kwargs)
-        self.orientation = "vertical"
+class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
+    __variation_number = 1
 
-        self.add_widget(Form(
-            TextInput(
-                MDTextFieldHintText(text = "Product Name"),
-                MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"Loft Light\""),
-                size_hint_x = 0.6,
-                form_id = "name"
+    @classmethod
+    def change_variation_number(self, number):
+        self.__variation_number = number
+
+    def __init__(self, *args, **kwargs):
+        super(VariationForm, self).__init__(*args, **kwargs)
+
+        self.default_name = f"Variation {self.__variation_number}"
+
+        self.__form = Form(
+            Form(
+                TextInput(
+                    MDTextFieldHintText(text = "Variant Name"),
+                    MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"ADA\""),
+                    on_text_change = self.rename_tab,
+                    form_id = "subname"
+                ),
+                Form(
+                    TextInput(
+                        MDTextFieldHintText(text = "Variation Extension"),
+                        MDTextFieldHelperText(text = "Example: for \"UA0040-A\", it would be \"A\""),
+                        form_id = "extension"
+                    ),
+                    SwitchInput("Display", form_id = "display"),
+                    adaptive_height = True
+                ),
+                TextInput(
+                    MDTextFieldLeadingIcon(icon = "currency-usd"),
+                    MDTextFieldHintText(text = "Variation Base Price"),
+                    MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"1095\""),
+                    form_id = "price"
+                ),
+                MDLabel(text = "Tags", adaptive_size = True),
+                TagForm(),
+                MDLabel(text = "Finishes"),
+                FinishesForm(),
+                MDLabel(text = "Options"),
+                OptionsForm(),
+                orientation = "vertical",
+                size_hint_x = 0.5,
+                adaptive_height = True,
+                pos_hint = {"top": 1}
             ),
-            TextInput(
-                MDTextFieldHintText(text = "Product ID"),
-                MDTextFieldHelperText(text = "Example: for \"UA0040-A\", it would be \"UA0040\""),
-                size_hint_x = 0.4,
-                form_id = "id"
-            )
+            Form(
+                MDLabel(text = "Specifications", adaptive_size = True),
+                Form(
+                    TextInput(
+                        MDTextFieldHintText(text = "Variation Height"),
+                        form_id = "height"
+                    ),
+                    TextInput(
+                        MDTextFieldHintText(text = "Variation Width"),
+                        form_id = "width"
+                    ),
+                    TextInput(
+                        MDTextFieldHintText(text = "Variation Depth"),
+                        MDTextFieldHelperText(text = "For wallmounted products this would be the projection."),
+                        form_id = "depth"
+                    ),
+                    TextInput(
+                        MDTextFieldHintText(text = "Variation Weight"),
+                        form_id = "weight"
+                    ),
+                    form_id = "specifications",
+                    orientation = "vertical",
+                    adaptive_height = True
+                ),
+                MDLabel(text = "UL Info"),
+                CheckGroup(
+                    CheckboxInput("Dry Environments", value = "Dry", group = f"UL_{self.default_name}", adaptive_height = True),
+                    CheckboxInput("Wet Environments", value = "Wet", group = f"UL_{self.default_name}",  adaptive_height = True),
+                    CheckboxInput("None", group = f"UL_{self.default_name}", active = True,  adaptive_height = True),
+                    form_id = "ul_info",
+                    adaptive_height = True
+                ),
+                MDLabel(text = "Replacements"),
+                ReplacementForm(),
+                TextInput(
+                    MDTextFieldHintText(text = "Variation Notes"),
+                    MDTextFieldHelperText(text = "Any additional information that needs to be included."),
+                    form_id = "notes"
+                ),
+                orientation = "vertical",
+                size_hint_x = 0.5,
+                adaptive_height = True,
+                pos_hint = {"top": 1}
+            ),
+            orientation = "horizontal",
+            adaptive_height = True,
+            padding = ['20dp', '30dp'],
+        )
+        self.add_widget(self.__form)
+
+        self.md_bg_color = self.theme_cls.surfaceBrightColor
+
+    def prefill(self, data):
+        overview = forms.pop("overview")
+        variation.update(overview)
+
+        self.__form.prefill(data)
+
+    def submit(self):
+        form_data = self.__form.submit()[1]
+
+        overview = {}
+        for key in ["finishes", "options", "replacement_ids", "ul_info", "specifications", "notes"]:
+            overview[key] = form_data.pop(key)
+        form_data["overview"] = overview
+
+        return "__variation", form_data
+
+    def rename_tab(self, text):
+        if hasattr(self, "tab_item"):
+            self.tab_item.rename(text)
+
+class ProductForm(FormStructure, MDBoxLayout):
+    def __init__(self, *args, on_submit = None, on_cancel = None, **kwargs):
+        super(ProductForm, self).__init__(*args, **kwargs)
+
+        self.__old_product_id = None
+        self.__on_submit = on_submit
+
+        self.variation_number = 1
+
+        variation_forms = TabForm(form_id = "variations", slide = VariationForm)
+        self.__form = Form(
+            Form(
+                Form(
+                    TextInput(
+                        MDTextFieldHintText(text = "Product Name"),
+                        MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"Loft Light\""),
+                        size_hint_x = 0.6,
+                        form_id = "name"
+                    ),
+                    TextInput(
+                        MDTextFieldHintText(text = "Product ID"),
+                        MDTextFieldHelperText(text = "Example: for \"UA0040-A\", it would be \"UA0040\""),
+                        size_hint_x = 0.4,
+                        form_id = "id"
+                    ),
+                    adaptive_height = True
+                ),
+                TextInput(
+                    MDTextFieldHintText(text = "Product Desctiption"),
+                    MDTextFieldHelperText(text = "This is not the product overview"),
+                    form_id = "description"
+                ),
+                orientation = "vertical",
+                adaptive_height = True,
+                padding = ["20dp", "20dp", "20dp", 0]
+            ),
+            variation_forms,
+            orientation = "vertical",
+            adaptive_height = True
+        )
+
+        def add_variation_form():
+            variation_forms.add_tab()
+            self.variation_number += 1
+            VariationForm.change_variation_number(self.variation_number)
+
+        def remove_variation_form():
+            if variation_forms.remove_tab():
+                self.variation_number -= 1
+                VariationForm.change_variation_number(self.variation_number)
+
+        add_tab = MDIconButton(
+            icon = "plus",
+            style = "tonal",
+            pos_hint = {"center_x": 0.5, "center_y": 0.5},
+        )
+        add_tab.bind(on_press = lambda *args: add_variation_form())
+        remove_tab = MDIconButton(
+            icon = "minus",
+            style = "outlined",
+            pos_hint = {"center_x": 0.5, "center_y": 0.5},
+        )
+        remove_tab.bind(on_press = lambda *args: remove_variation_form())
+        submit = MDIconButton(
+            icon = "check",
+            style = "filled",
+            pos_hint = {"center_x": 0.5, "center_y": 0.5},
+        )
+        submit.bind(on_press = lambda *args: self.submit())
+
+        home = MDIconButton(
+            icon = "home",
+            style = "tonal",
+            pos_hint = {"center_x": 0.5, "center_y": 0.5}
+        )
+        home.bind(on_press = lambda *args: on_cancel())
+
+        self.add_widget(MDBoxLayout(
+            home,
+            MDLabel(text = "Product Information", font_style = "Display", role = "small", adaptive_size = True),
+            adaptive_height = True,
+            spacing = "20dp",
+            padding = ['20dp']
         ))
-        self.add_widget(TextInput(
-            MDTextFieldHintText(text = "Product Desctiption"),
-            MDTextFieldHelperText(text = "This is not the product overview"),
-            form_id = "description"
+        self.add_widget(self.__form)
+        self.add_widget(MDBoxLayout(
+            MDBoxLayout(
+                add_tab,
+                remove_tab,
+                adaptive_height = True,
+                spacing = "10dp",
+                size_hint_x = 0.5
+            ),
+            submit,
+            padding = ['20dp'],
+            adaptive_height = True,
         ))
 
+        self.orientation = "vertical"
         self.adaptive_height = True
+
+    def __reset(self):
+        self.variation_number = 0
+
+    def default(self):
+        self.__reset()
+        self.__form.default()
+
+    def prefill(self, id):
+        self.__reset()
+        self.__old_product_id = id
+        self.__form.prefill(Database.get_product(self.__old_product_id))
+
+    def submit(self):
+        if self.__old_product_id:
+            Database.update_product(self.__old_product_id, self.__form.submit()[1])
+        else:
+            Database.create_product(self.__form.submit()[1])
+        self.__old_product_id = None
+        if self.__on_submit:
+            self.__on_submit()
