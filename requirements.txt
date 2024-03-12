@@ -3,6 +3,7 @@ asynckivy==0.6.2
 certifi==2023.11.17
 charset-normalizer==3.3.2
 click==8.1.7
+colour==0.1.5
 docutils==0.20.1
 idna==3.6
 joblib==1.3.2
