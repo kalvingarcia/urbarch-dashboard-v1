@@ -1,11 +1,13 @@
+from kivy.clock import Clock
+from kivymd.uix.tab import MDTabsPrimary, MDTabsItem, MDTabsItemText, MDTabsCarousel
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.stacklayout import MDStackLayout
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.textfield import MDTextField, MDTextFieldLeadingIcon
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDButton, MDButtonText
+from kivymd.uix.button import MDButton, MDButtonText, MDIconButton
 from kivymd.uix.selectioncontrol import MDCheckbox, MDSwitch
-from kivymd.uix.chip import MDChip, MDChipText
+from kivymd.uix.chip import MDChip, MDChipText, MDChipTrailingIcon
 from kivymd.uix.dialog import MDDialog, MDDialogButtonContainer, MDDialogContentContainer, MDDialogHeadlineText
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.dropdownitem import MDDropDownItem, MDDropDownItemText
@@ -17,6 +19,13 @@ class FormStructure:
         super(FormStructure, self).__init__(*args, **kwargs)
         self.form_id = form_id
 
+    # This function is inherited and implemented by
+    # this classes children
+    def default(self):
+        pass
+
+    # This function is inherited and implemented by
+    # this classes children
     def prefill(self):
         pass
 
@@ -28,19 +37,23 @@ class FormStructure:
 # this class will be used as a container to hold other
 # form structures
 class Form(FormStructure, MDBoxLayout):
-    def __init__(self, *args, on_submit = None, spacing = '30dp', **kwargs):
+    def __init__(self, *args, on_submit = None, spacing = '30dp', form_id = "__form", **kwargs):
         self._form_structures = {}
 
-        super(Form, self).__init__(*args, form_id = "__form", spacing = spacing, **kwargs)
+        super(Form, self).__init__(*args, spacing = spacing, form_id = form_id, **kwargs)
 
         self.__on_submit = on_submit
+
+    def default(self):
+        for form_structure in self._form_structures.values():
+            form_structure.default()
 
     def prefill(self, data: dict):
         for key, value in data.items():
             try:
                 self._form_structures[key].prefill(value)
             except Exception as e:
-                print(str(e) + key + ": " + str(self._form_structures.keys()))
+                pass # print(str(e) + ": " + str(self._form_structures.keys()))
 
     def submit(self):
         submission = {}
@@ -67,19 +80,23 @@ class Form(FormStructure, MDBoxLayout):
                 self._form_structures.update(widget._form_structures)
             else:
                 self._form_structures[widget.form_id] = widget
-            return super(Form, self).add_widget(widget)
+        return super(Form, self).add_widget(widget)
 
 # this class uses the MDTextField, but enhances the
 # class by using the form structure and adding a
 # text change hook
 class TextInput(FormStructure, MDTextField):
-    def __init__(self, *args, on_submit = None, on_text_change = None, on_validate = None, **kwargs):
+    def __init__(self, *args, default_text = "", on_submit = None, on_text_change = None, on_validate = None, **kwargs):
         super(TextInput, self).__init__(*args, **kwargs)
 
+        self.__default_text = default_text
         self.__on_submit = on_submit
         self.__on_text_change = on_text_change
         self.__on_validate = on_validate
         self.write_tab = False
+
+    def default(self):
+        self.text = self.__default_text
 
     def prefill(self, text):
         self.text = str(text)
@@ -135,13 +152,18 @@ class CheckboxInput(FormStructure, MDBoxLayout):
     def __init__(self, label_text, *args, value = None, group = None, on_submit = None, active = False, **kwargs):
         super(CheckboxInput, self).__init__(*args, **kwargs)
 
-        self.value = value if value is not None else label_text
+        self.value = value if value is not None else self.form_id
 
         self.__on_submit = on_submit
+
+        self.__default_active = active
 
         self.__checkbox = MDCheckbox(group = group, active = active, pos_hint = {"center_y": 0.5})
         self.add_widget(self.__checkbox)
         self.add_widget(MDLabel(text = label_text, pos_hint = {"center_y": 0.5}))
+
+    def default(self):
+        self.__checkbox.active = self.__default_active
 
     def prefill(self, active):
         self.__checkbox.active = active
@@ -163,6 +185,10 @@ class CheckGroup(FormStructure, MDBoxLayout):
         self.orientation = "vertical"
 
         self.__on_submit = on_submit
+
+    def default(self):
+        for checkbox in self.__group:
+            checkbox.default()
 
     def prefill(self, active_values):
         for checkbox in self.__group:
@@ -196,11 +222,16 @@ class SwitchInput(FormStructure, MDBoxLayout):
     def __init__(self, label_text, *args, on_submit = None, active = False, **kwargs):
         super(SwitchInput, self).__init__(*args, **kwargs)
 
+        self.__default_active = active
+
         self.__on_submit = on_submit
 
         self.add_widget(MDLabel(text = label_text, pos_hint = {"center_y": 0.5}))
         self.__switch = MDSwitch(active = active)
         self.add_widget(self.__switch)
+
+    def default(self):
+        self.__switch.active = self.__default_active
 
     def prefill(self, active):
         self.__switch.active = active
@@ -210,21 +241,26 @@ class SwitchInput(FormStructure, MDBoxLayout):
             self.__on_submit()
         return self.form_id, self.__switch.active
 
+class DropDownLabel(MDLabel):
+    def __init__(self, *args, **kwargs):
+        super(DropDownLabel, self).__init__(*args, **kwargs)
+        self.adaptive_width = True
+
 class DropdownInput(FormStructure, MDDropDownItem):
     def __init__(self, *args, data = None, default_entry = 0, **kwargs):
         super(DropdownInput, self).__init__(*args, **kwargs)
-
-        self.font_style = "H1"
 
         self.__data = data
         items = [{
             "text": entry["text"],
             "on_release": lambda value = entry["value"], text = entry["text"]: self.set(value, text)
         } for entry in self.__data]
-        self.dropdown = MDDropdownMenu(caller = self, items = items, position = "bottom")
-        self._container = MDDropDownItemText()
-        self.add_widget(self._container)
+        self.dropdown = MDDropdownMenu(caller = self, items = items)
 
+        self._drop_down_text = DropDownLabel(padding = ["10dp"])
+        self._drop_down_text.bind(text=self.update_text_item)
+
+        self.__default_entry = default_entry
         self.set(self.__data[default_entry]["value"], self.__data[default_entry]["text"])
 
     def on_release(self):
@@ -232,17 +268,19 @@ class DropdownInput(FormStructure, MDDropDownItem):
 
     def set(self, value, text):
         self.__value = value
-        self._container.text = text
+        self._drop_down_text.text = text
+
+    def default(self):
+        self.set(self.__data[default_entry]["value"], self.__data[self.__default_entry]["text"])
 
     def prefill(self, value):
         self.__value = value
         for entry in self.__data:
             if value == entry["value"]:
-                self._container.text = entry["text"]
+                self._drop_down_text.text = entry["text"]
 
     def submit(self):
         return self.form_id, self.__value
-
 
 class TableEntry(Form):
     def __init__(self, *args, form_name = None, on_remove, **kwargs):
@@ -258,23 +296,26 @@ class TableEntry(Form):
         remove.bind(on_press = lambda *args: self.__remove_self(self))
         self.add_widget(remove)
 
-class TableForm(FormStructure, MDScrollView):
+class TableForm(FormStructure, MDBoxLayout):
     def __init__(self, *args, **kwargs):
         super(TableForm, self).__init__(*args, **kwargs)
 
-        self.size_hint_y = None
-        self.height = "400dp"
+        self.orientation = "vertical"
+        self.adaptive_height = True
 
-        self.__container = MDBoxLayout(orientation = "vertical", adaptive_height = True, pos_hint = {"top": 1})
+        self._container = MDBoxLayout(orientation = "vertical", adaptive_height = True, pos_hint = {"top": 1})
         button = MDButton(MDButtonText(text = "Add"))
         button.bind(on_press = lambda *args: self.add_entry())
         self.add_widget(MDBoxLayout(
-            self.__container,
+            self._container,
             button,
             orientation = "vertical",
             adaptive_height = True,
             pos_hint = {"bottom": 1}
         ))
+
+    def default(self):
+        self._container.clear_widgets()
 
     def prefill(self, entries):
         for entry in entries:
@@ -282,9 +323,9 @@ class TableForm(FormStructure, MDScrollView):
 
     def submit(self):
         submission = []
-        for entry in self.__container.children:
+        for entry in self._container.children:
             submission.append(entry.submit()[1])
-        return form_id, submission
+        return self.form_id, submission
 
     def add_entry(self, entry = None):
         table_entry = TableEntry(
@@ -297,19 +338,25 @@ class TableForm(FormStructure, MDScrollView):
         if entry is not None:
             table_entry.prefill(entry)
 
-        self.__container.add_widget(table_entry)
+        self._container.add_widget(table_entry)
 
     def remove_entry(self, entry):
-        self.__container.remove_widget(entry)
+        self._container.remove_widget(entry)
 
 # This class is a form extended MDChip used to create chips for the search form
 class SearchChip(FormStructure, MDChip):
-    def __init__(self, id, *args, **kwargs):
+    def __init__(self, id, *args, on_remove, **kwargs):
         super(SearchChip, self).__init__(*args, **kwargs)
 
+        self.type = "input"
         self.form_id = "__search_chip"
 
+        self.__remove_self = on_remove
+
         self.__id = id
+
+    def on_release(self, *args):
+        self.__remove_self(self)
 
     def submit(self):
         return self.form_id, self.__id
@@ -344,9 +391,9 @@ class SearchForm(FormStructure, MDBoxLayout):
         super(SearchForm, self).__init__(*args, **kwargs)
 
         self.search_box = TextInput(on_validate = self.search)
-        search_button = MDButton(MDButtonText(text = "Search"))
+        search_button = MDIconButton(icon = "magnify")
         search_button.bind(on_press = self.search)
-        search_bar = MDBoxLayout(self.search_box, search_button)
+        search_bar = MDBoxLayout(self.search_box, search_button, adaptive_height = True)
         self.add_widget(search_bar)
         self.results = SearchResults(
             caller = self.search_box,
@@ -360,9 +407,20 @@ class SearchForm(FormStructure, MDBoxLayout):
         self.orientation = "vertical"
         self.adaptive_height = True
 
+    def remove_chip(self, chip):
+        self._container.remove_widget(chip)
+
     def append(self, id, text):
         if id not in [child.submit()[1] for child in self._container.children]:
-            self._container.add_widget(SearchChip(id, MDChipText(text = text)))
+            icon = MDChipTrailingIcon(icon = "window-close")
+            chip = SearchChip(
+                id,
+                MDChipText(text = text),
+                icon,
+                on_remove = self.remove_chip
+            )
+            icon.bind(on_press = lambda *args: self.remove_chip(chip))
+            self._container.add_widget(chip)
 
     def search_database(self):
         return []
@@ -375,8 +433,103 @@ class SearchForm(FormStructure, MDBoxLayout):
                 self._container.add_widget(chip)
             dialog.dismiss()
 
+    def default(self):
+        self._container.clear_widgets()
+
     def submit(self):
         return self.form_id, [child.submit()[1] for child in self._container.children]
 
+class TabFormItem(MDTabsItem):
+    def __init__(self, *args, text = None, **kwargs):
+        super(TabFormItem, self).__init__(*args, **kwargs)
 
+        self.default_text = text
+        self.text = MDTabsItemText(text = self.default_text)
+        self.add_widget(self.text)
+
+    def rename(self, text):
+        if text == '':
+            text = self.default_text
+        self.text.text = text
+
+        # this is the kivymd method for set_width
+        # but they also "add_widget" which causes errors
+        def set_width(*args):
+            self.width = self.text.texture_size[0] + self.text.padding_x + 2
+
+        # i'm assuming it is scheduled to delay the width until after the texture updates
+        if not self._tabs.allow_stretch and isinstance(self.text, MDTabsItemText):
+            Clock.schedule_once(set_width)
+
+    def update_color(self):
+        self.md_bg_color = self.theme_cls.surfaceBrightColor if self.active else self.theme_cls.surfaceColor
+
+class TabForm(MDTabsPrimary, FormStructure):
+    def __init__(self, *args, slide = None, **kwargs):
+        super(TabForm, self).__init__(*args, **kwargs)
+
+        self.allow_stretch = False
+        self.label_only = True
+        self.lock_swiping = True
+        self.anim_diration = 0.1
+
+        self.__slide = slide
+
+        # creating the content structure
+        self.__content = MDTabsCarousel(
+            size_hint_y = None,
+            height = "500dp"
+        )
+
+    def on_tab_switch(self, tab, content):
+        if isinstance(tab, TabFormItem):
+            if self.target:
+                self.target.tab_item.update_color()
+            tab.update_color()
+
+    def __clear(self):
+        self.ids.container.clear_widgets()
+        self.__content.clear_widgets()
+        
+        if not self._tabs_carousel:
+            self.add_widget(self.__content)
+
+    def default(self):
+        self.__clear()
+        # adding the default item tab
+        self.add_tab()
+
+    def prefill(self, forms):
+        self.__clear()
+        for form in forms:
+            self.add_tab(form)
+
+    def submit(self):
+        forms = []
+        for slide in self.get_slides_list():
+            forms.append(slide.submit()[1])
+        return self.form_id, forms
+
+    def add_tab(self, data = None):        
+        slide = self.__slide()
+        self.__content.add_widget(slide)
+
+        tab = TabFormItem(text = slide.default_name)
+        self.add_widget(tab)
+        
+        # doing kivymd's work for them since they don't know how to code
+        setattr(tab, "_tab_content", slide)
+        setattr(slide, "tab_item", tab)
+
+        # if data is None then that means we aren't prefilling,
+        # so the function was called by the form button
+        if data is not None:
+            slide.prefill(data)
+        self._switch_tab(tab)
+
+    def remove_tab(self):
+        tab = self.get_current_tab()
+        if tab is not None:
+            self.__content.remove_widget(tab._tab_content)
+            self.ids.container.remove_widget(tab)
 
