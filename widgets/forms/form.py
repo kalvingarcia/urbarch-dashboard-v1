@@ -1,9 +1,11 @@
 from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.metrics import dp
 from kivymd.uix.tab import MDTabsPrimary, MDTabsItem, MDTabsItemText, MDTabsCarousel
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.stacklayout import MDStackLayout
 from kivymd.uix.scrollview import MDScrollView
-from kivymd.uix.textfield import MDTextField, MDTextFieldLeadingIcon
+from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDButton, MDButtonText, MDIconButton
 from kivymd.uix.selectioncontrol import MDCheckbox, MDSwitch
@@ -50,10 +52,8 @@ class Form(FormStructure, MDBoxLayout):
 
     def prefill(self, data: dict):
         for key, value in data.items():
-            try:
+            if key in self._form_structures.keys():
                 self._form_structures[key].prefill(value)
-            except Exception as e:
-                pass # print(str(e) + ": " + str(self._form_structures.keys()))
 
     def submit(self):
         submission = {}
@@ -146,10 +146,54 @@ class TextInput(FormStructure, MDTextField):
         if self.__on_validate is not None:
             self.__on_validate(self.text)
 
+# this class uses the MDTextField, but enhances the
+# class by using the form structure and adding a
+# text change hook
+class NumberInput(FormStructure, MDTextField):
+    def __init__(self, *args, default_text = 0, is_int = False, on_submit = None, on_text_change = None, on_validate = None, **kwargs):
+        super(NumberInput, self).__init__(*args, **kwargs)
+
+        self.__is_int = is_int
+        self.__default_text = default_text
+        self.__on_submit = on_submit
+        self.__on_text_change = on_text_change
+        self.__on_validate = on_validate
+        self.write_tab = False
+
+    def default(self):
+        self.text = str(self.__default_text)
+
+    def prefill(self, text):
+        self.text = str(text)
+
+    def submit(self):
+        if self.__on_submit is not None:
+            self.__on_submit()
+        return self.form_id, self.__default_text if self.text == '' else int(self.text) if self.__is_int else float(self.text)
+
+    # This function follows this structure which i previously
+    # used to capture the set_text for the MDTextField class
+    # but that was a bandaid test, this is a little more rigid
+    def set_text(self, instance, text: str):
+        # This section of code is used to check and remove non-numerical characters
+        new_text = ""
+        for c in text:
+            if c.isdigit() or (c == "." and not self.__is_int):
+                new_text += c
+
+        super(NumberInput, self).set_text(instance, new_text)
+        if self.__on_text_change is not None:
+            self.__on_text_change(new_text) # calling the text change hook
+
+    def on_text_validate(self):
+        super(NumberInput, self).on_text_validate()
+        if self.__on_validate is not None:
+            self.__on_validate(self.text)
+
 # This class combines the MDLabel and MDCheckbox into
 # one class for ease of use in forms
 class CheckboxInput(FormStructure, MDBoxLayout):
-    def __init__(self, label_text, *args, value = None, group = None, on_submit = None, active = False, **kwargs):
+    def __init__(self, *args, label = None, value = None, group = None, on_submit = None, active = False, **kwargs):
         super(CheckboxInput, self).__init__(*args, **kwargs)
 
         self.value = value if value is not None else self.form_id
@@ -160,7 +204,11 @@ class CheckboxInput(FormStructure, MDBoxLayout):
 
         self.__checkbox = MDCheckbox(group = group, active = active, pos_hint = {"center_y": 0.5})
         self.add_widget(self.__checkbox)
-        self.add_widget(MDLabel(text = label_text, pos_hint = {"center_y": 0.5}))
+        if label:
+            self.add_widget(MDLabel(text = label, adaptive_size = True, padding = "10dp"))
+        
+        self.spacing = "10dp"
+        self.adaptive_height = True
 
     def default(self):
         self.__checkbox.active = self.__default_active
@@ -219,16 +267,20 @@ class CheckGroup(FormStructure, MDBoxLayout):
 # This class enhances MDSwitch to allow ease of
 # submitting data
 class SwitchInput(FormStructure, MDBoxLayout):
-    def __init__(self, label_text, *args, on_submit = None, active = False, **kwargs):
+    def __init__(self, *args, label = None, on_submit = None, active = False, **kwargs):
         super(SwitchInput, self).__init__(*args, **kwargs)
 
         self.__default_active = active
 
         self.__on_submit = on_submit
 
-        self.add_widget(MDLabel(text = label_text, pos_hint = {"center_y": 0.5}))
-        self.__switch = MDSwitch(active = active)
+        if label:
+            self.add_widget(MDLabel(text = label, pos_hint = {"center_y": 0.5}, adaptive_size = True, padding = "10dp"))
+        self.__switch = MDSwitch(active = active, pos_hint = {"center_y": 0.5})
         self.add_widget(self.__switch)
+
+        self.spacing = "10dp"
+        self.adaptive_height = True
 
     def default(self):
         self.__switch.active = self.__default_active
@@ -271,7 +323,7 @@ class DropdownInput(FormStructure, MDDropDownItem):
         self._drop_down_text.text = text
 
     def default(self):
-        self.set(self.__data[default_entry]["value"], self.__data[self.__default_entry]["text"])
+        self.set(self.__data[self.__default_entry]["value"], self.__data[self.__default_entry]["text"])
 
     def prefill(self, value):
         self.__value = value
@@ -287,8 +339,7 @@ class TableEntry(Form):
         super(TableEntry, self).__init__(*args, **kwargs)
         self.orientation = "horizontal"
 
-        self.size_hint_y = None
-        self.height = "100dp"
+        self.adaptive_height = True
 
         self.__remove_self = on_remove
 
@@ -304,7 +355,7 @@ class TableForm(FormStructure, MDBoxLayout):
         self.adaptive_height = True
 
         self._container = MDBoxLayout(orientation = "vertical", adaptive_height = True, pos_hint = {"top": 1})
-        button = MDButton(MDButtonText(text = "Add"))
+        button = MDButton(MDButtonText(text = "Add Option"))
         button.bind(on_press = lambda *args: self.add_entry())
         self.add_widget(MDBoxLayout(
             self._container,
@@ -329,9 +380,9 @@ class TableForm(FormStructure, MDBoxLayout):
 
     def add_entry(self, entry = None):
         table_entry = TableEntry(
-            TextInput(form_id = "display"),
-            TextInput(form_id = "difference"),
-            CheckboxInput("", form_id = "default"),
+            TextInput(MDTextFieldHintText(text = "Display Name"), form_id = "display", role = "medium"),
+            NumberInput(MDTextFieldHintText(text = "Price Difference"), form_id = "difference", role = "medium"),
+            CheckboxInput(form_id = "default", size_hint_x = 0.2),
             on_remove = self.remove_entry
         )
 
@@ -390,15 +441,17 @@ class SearchForm(FormStructure, MDBoxLayout):
     def __init__(self, *args, **kwargs):
         super(SearchForm, self).__init__(*args, **kwargs)
 
-        self.search_box = TextInput(on_validate = self.search)
-        search_button = MDIconButton(icon = "magnify")
+        self.search_box = TextInput(MDTextFieldHintText(text = "Search"), on_validate = self.search)
+        search_button = MDIconButton(icon = "magnify", pos_hint = {"center_y": 0.5})
         search_button.bind(on_press = self.search)
-        search_bar = MDBoxLayout(self.search_box, search_button, adaptive_height = True)
+        search_bar = MDBoxLayout(self.search_box, search_button, adaptive_height = True, spacing = "10dp")
         self.add_widget(search_bar)
         self.results = SearchResults(
             caller = self.search_box,
             on_press = self.append,
-            create_tag = self.create_tag if hasattr(self, "create_tag") else None
+            create_tag = self.create_tag if hasattr(self, "create_tag") else None,
+            size_hint_x = None,
+            width = self.search_box.width
         )
 
         self._container = MDStackLayout(adaptive_height = True)
@@ -406,6 +459,7 @@ class SearchForm(FormStructure, MDBoxLayout):
 
         self.orientation = "vertical"
         self.adaptive_height = True
+        self.spacing = "10dp"
 
     def remove_chip(self, chip):
         self._container.remove_widget(chip)
@@ -478,8 +532,12 @@ class TabForm(MDTabsPrimary, FormStructure):
         # creating the content structure
         self.__content = MDTabsCarousel(
             size_hint_y = None,
-            height = "500dp"
         )
+
+        Window.bind(on_resize = self._on_window_resize)
+
+    def _on_window_resize(self, window, width, height):
+        self.__content.height = height - (1600 - 800)
 
     def on_tab_switch(self, tab, content):
         if isinstance(tab, TabFormItem):
@@ -532,4 +590,6 @@ class TabForm(MDTabsPrimary, FormStructure):
         if tab is not None:
             self.__content.remove_widget(tab._tab_content)
             self.ids.container.remove_widget(tab)
+            return True
+        return False
 
