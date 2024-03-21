@@ -5,15 +5,19 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextFieldHelperText, MDTextFieldHintText, MDTextFieldLeadingIcon
 from kivymd.uix.button import MDIconButton
 from api.database import Database
-from widgets.forms.form import FormStructure, Form, TextInput, CheckboxInput, CheckGroup, SwitchInput, TabForm
+from widgets.forms.form import FormStructure, Form, TextInput, CheckboxInput, CheckGroup, SwitchInput, TabForm, NumberInput
 from widgets.forms.overviewforms import ReplacementForm, TagForm, FinishesForm, OptionsForm
 
 class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
-    __variation_number = 1
+    __variation_number = 0
 
     @classmethod
-    def change_variation_number(self, number):
-        self.__variation_number = number
+    def change_variation_number(cls, number):
+        cls.__variation_number = number
+
+    @classmethod
+    def get_variation_number(cls):
+        return cls.__variation_number
 
     def __init__(self, *args, **kwargs):
         super(VariationForm, self).__init__(*args, **kwargs)
@@ -32,22 +36,23 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
                     TextInput(
                         MDTextFieldHintText(text = "Variation Extension"),
                         MDTextFieldHelperText(text = "Example: for \"UA0040-A\", it would be \"A\""),
-                        form_id = "extension"
+                        form_id = "extension",
                     ),
-                    SwitchInput("Display", form_id = "display"),
+                    SwitchInput(label = "Display", form_id = "display", size_hint_x = 0.25),
                     adaptive_height = True
                 ),
-                TextInput(
+                NumberInput(
                     MDTextFieldLeadingIcon(icon = "currency-usd"),
                     MDTextFieldHintText(text = "Variation Base Price"),
                     MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"1095\""),
-                    form_id = "price"
+                    form_id = "price",
+                    is_int = True
                 ),
                 MDLabel(text = "Tags", adaptive_size = True),
                 TagForm(),
-                MDLabel(text = "Finishes"),
+                MDLabel(text = "Finishes", adaptive_size = True),
                 FinishesForm(),
-                MDLabel(text = "Options"),
+                # MDLabel(text = "Options"),
                 OptionsForm(),
                 orientation = "vertical",
                 size_hint_x = 0.5,
@@ -57,20 +62,20 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
             Form(
                 MDLabel(text = "Specifications", adaptive_size = True),
                 Form(
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Height"),
                         form_id = "height"
                     ),
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Width"),
                         form_id = "width"
                     ),
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Depth"),
                         MDTextFieldHelperText(text = "For wallmounted products this would be the projection."),
                         form_id = "depth"
                     ),
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Weight"),
                         form_id = "weight"
                     ),
@@ -78,15 +83,15 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
                     orientation = "vertical",
                     adaptive_height = True
                 ),
-                MDLabel(text = "UL Info"),
+                MDLabel(text = "UL Info", adaptive_size = True),
                 CheckGroup(
-                    CheckboxInput("Dry Environments", value = "Dry", group = f"UL_{self.default_name}", adaptive_height = True),
-                    CheckboxInput("Wet Environments", value = "Wet", group = f"UL_{self.default_name}",  adaptive_height = True),
-                    CheckboxInput("None", group = f"UL_{self.default_name}", active = True,  adaptive_height = True),
+                    CheckboxInput(label = "Dry Environments", value = "Dry", group = f"UL_{self.default_name}", adaptive_height = True),
+                    CheckboxInput(label = "Wet Environments", value = "Wet", group = f"UL_{self.default_name}",  adaptive_height = True),
+                    CheckboxInput(label = "None", group = f"UL_{self.default_name}", active = True,  adaptive_height = True),
                     form_id = "ul_info",
                     adaptive_height = True
                 ),
-                MDLabel(text = "Replacements"),
+                MDLabel(text = "Replacements", adaptive_size = True),
                 ReplacementForm(),
                 TextInput(
                     MDTextFieldHintText(text = "Variation Notes"),
@@ -107,8 +112,10 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
         self.md_bg_color = self.theme_cls.surfaceBrightColor
 
     def prefill(self, data):
-        overview = forms.pop("overview")
-        variation.update(overview)
+        overview = data.pop("overview")
+        data.update(overview)
+
+        VariationForm.change_variation_number(self.__variation_number + 1)
 
         self.__form.prefill(data)
 
@@ -168,9 +175,9 @@ class ProductForm(FormStructure, MDBoxLayout):
         )
 
         def add_variation_form():
+            VariationForm.change_variation_number(self.variation_number)
             variation_forms.add_tab()
             self.variation_number += 1
-            VariationForm.change_variation_number(self.variation_number)
 
         def remove_variation_form():
             if variation_forms.remove_tab():
@@ -228,7 +235,7 @@ class ProductForm(FormStructure, MDBoxLayout):
         self.adaptive_height = True
 
     def __reset(self):
-        self.variation_number = 0
+        self.variation_number = 1
 
     def default(self):
         self.__reset()
@@ -238,6 +245,8 @@ class ProductForm(FormStructure, MDBoxLayout):
         self.__reset()
         self.__old_product_id = id
         self.__form.prefill(Database.get_product(self.__old_product_id))
+
+        self.variation_number = VariationForm.get_variation_number()
 
     def submit(self):
         if self.__old_product_id:

@@ -6,48 +6,55 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDIconButton
 from api.database import Database
 from kivymd.uix.textfield import MDTextFieldHintText, MDTextFieldHelperText, MDTextFieldLeadingIcon
-from widgets.forms.form import FormStructure, Form, TextInput, SwitchInput, CheckboxInput, CheckGroup, TabForm
+from widgets.forms.form import FormStructure, Form, TextInput, NumberInput, SwitchInput, CheckboxInput, CheckGroup, TabForm
 from widgets.forms.overviewforms import TagForm
 
 class ItemForm(FormStructure, MDScrollView, ThemableBehavior):
-    __item_number = 1
+    __item_number = 0
 
     @classmethod
-    def change_item_number(self, number):
-        self.__item_number = number
+    def change_item_number(cls, number):
+        cls.__item_number = number
+
+    @classmethod
+    def get_item_number(cls):
+        return cls.__item_number
 
     def __init__(self, *args, tab_form_instance = None, **kwargs):
         super(ItemForm, self).__init__(*args, **kwargs)
 
-        self.default_name = f"Item {self.__item_number}"
+        self.default_name = "New Item"
 
         def set_item_number(text):
             if text == '':
-                text = '0'
-            self.__item_number = int(text)
-            self.rename_tab(f"Item {self.__item_number}")
+                text = "New Item"
+            else:
+                self.__item_number = int(text)
+                self.rename_tab(f"Item {self.__item_number}")
 
         self.__form  = Form(
             Form(
                 Form(
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Item Number"),
                         MDTextFieldHelperText(text = "This is the number of the item in the series."),
                         form_id = "serial",
+                        is_int = True,
                         on_text_change = set_item_number
                     ),
-                    SwitchInput("Display", form_id = "display"),
+                    SwitchInput(label = "Display", form_id = "display"),
                     adaptive_height = True
                 ),
-                TextInput(
+                NumberInput(
                     MDTextFieldLeadingIcon(icon = "currency-usd"),
                     MDTextFieldHintText(text = "Item Price"),
                     MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"1095\""),
-                    form_id = "price"
+                    form_id = "price",
+                    is_int = True
                 ),
                 MDLabel(text = "History", adaptive_size = True),
                 Form(
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Item Era"),
                         form_id = "year"
                     ),
@@ -72,20 +79,20 @@ class ItemForm(FormStructure, MDScrollView, ThemableBehavior):
             Form(
                 MDLabel(text = "Specifications", adaptive_size = True),
                 Form(
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Height"),
                         form_id = "height"
                     ),
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Width"),
                         form_id = "width"
                     ),
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Depth"),
                         MDTextFieldHelperText(text = "For wallmounted products this would be the projection."),
                         form_id = "depth"
                     ),
-                    TextInput(
+                    NumberInput(
                         MDTextFieldHintText(text = "Variation Weight"),
                         form_id = "weight"
                     ),
@@ -110,8 +117,10 @@ class ItemForm(FormStructure, MDScrollView, ThemableBehavior):
         self.md_bg_color = self.theme_cls.surfaceBrightColor
 
     def prefill(self, data):
-        overview = forms.pop("overview")
-        variation.update(overview)
+        overview = data.pop("overview")
+        data.update(overview)
+
+        ItemForm.change_item_number(self.__item_number + 1)
 
         self.__form.prefill(data)
 
@@ -171,9 +180,9 @@ class SalvageForm(FormStructure, MDBoxLayout):
         )
 
         def add_item_form():
+            ItemForm.change_item_number(self.item_number)
             item_forms.add_tab()
             self.item_number += 1
-            ItemForm.change_item_number(self.item_number)
 
         def remove_item_form():
             if item_forms.remove_tab():
@@ -231,7 +240,7 @@ class SalvageForm(FormStructure, MDBoxLayout):
         self.adaptive_height = True
 
     def __reset(self):
-        self.item_number = 0
+        self.item_number = 1
 
     def default(self):
         self.__reset()
@@ -240,14 +249,16 @@ class SalvageForm(FormStructure, MDBoxLayout):
     def prefill(self, id):
         self.__reset()
         self.__old_salvage_id = id
-        # self.__form.prefill(Database.get_salvage(self.__old_salvage_id))
+        self.__form.prefill(Database.get_salvage(self.__old_salvage_id))
+
+        self.item_number = ItemForm.get_item_number()
 
     def submit(self):
         if self.__old_salvage_id:
-            # Database.update_salvage(self.__old_salvage_id, self.__form.submit()[1])
+            Database.update_salvage(self.__old_salvage_id, self.__form.submit()[1])
             print(self.__form.submit()[1])
         else:
-            # Database.create_salvage(self.__form.submit()[1])
+            Database.create_salvage(self.__form.submit()[1])
             print(self.__form.submit()[1])
         self.__old_salvage_id = None
         if self.__on_submit:

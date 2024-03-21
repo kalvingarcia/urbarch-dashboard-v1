@@ -1,10 +1,11 @@
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.scrollview import MDScrollView
-from kivymd.uix.button import MDButton, MDButtonText, MDIconButton
-from kivymd.uix.textfield import MDTextFieldHintText
+from kivymd.uix.label import MDLabel
+from kivymd.uix.button import MDButton, MDIconButton
+from kivymd.uix.textfield import MDTextFieldHintText, MDTextFieldHelperText
 from kivymd.uix.dialog import MDDialog, MDDialogButtonContainer, MDDialogContentContainer, MDDialogHeadlineText
 from api.database import Database
-from .form import FormStructure, Form, TextInput, CheckboxInput, SearchForm, TableForm, DropdownInput, TableEntry
+from .form import FormStructure, Form, TextInput, NumberInput, CheckboxInput, SearchForm, TableForm, DropdownInput, TableEntry
 
 class OptionsForm(FormStructure, MDBoxLayout):
     def __init__(self, *args, **kwargs):
@@ -15,31 +16,45 @@ class OptionsForm(FormStructure, MDBoxLayout):
         self.orientation = "vertical"
         self.adaptive_height = True
 
-        add = MDButton(
-            MDButtonText(text = "Add Option")
-        )
+        add = MDIconButton(icon = "plus", style = "filled")
         add.bind(on_press = lambda *args: self.add_form())
 
-        self.__forms = MDBoxLayout(adaptive_height = True, orientation = "vertical",  pos_hint = {"top": 1})
+        self.__forms = MDBoxLayout(adaptive_height = True, orientation = "vertical",  pos_hint = {"top": 1}, spacing = "10dp")
 
         self.add_widget(MDBoxLayout(
+            MDBoxLayout(
+                MDLabel(text = "Options", adaptive_size = True, pos_hint = {"center_y": 0.5}, font_style = "Headline", role = "small"),
+                add,
+                adaptive_height = True,
+                spacing = "10dp"
+            ),
             self.__forms,
-            add,
             orientation = "vertical",
             adaptive_height = True,
-            pos_hint = {"bottom": 1}
+            pos_hint = {"bottom": 1},
+            spacing = "20dp"
         ))
 
     def add_form(self, data = None):
+        remove = MDIconButton(icon = "window-close")
+
         new_form = Form(
-            TextInput(
-                MDTextFieldHintText(text = "Option Name"),
-                form_id = "option_name"
+            Form(
+                TextInput(
+                    MDTextFieldHintText(text = "Option Name"),
+                    form_id = "option_name",
+                    role = "medium"
+                ),
+                remove,
+                adaptive_height = True,
+                spacing = "10dp"
             ),
             TableForm(form_id = "option_content"),
             orientation = "vertical",
             adaptive_height = True
         )
+
+        remove.bind(on_release = lambda *args: self.__forms.remove_widget(new_form))
 
         if data:
             new_form.prefill(data)
@@ -66,8 +81,8 @@ class FinishesForm(TableForm):
         finishes = [{"value": entry["id"], "text": entry["name"]} for entry in Database.get_metal_finishes_list()]
         table_entry = TableEntry(
             DropdownInput(form_id = "finish", data = finishes),
-            TextInput(form_id = "difference"),
-            CheckboxInput("", form_id = "default"),
+            NumberInput(MDTextFieldHintText(text = "Price Difference"), form_id = "difference", role = "medium"),
+            CheckboxInput(form_id = "default", size_hint_x = 0.2),
             on_remove = self.remove_entry
         )
 
@@ -104,33 +119,42 @@ class TagForm(SearchForm):
             "value": category["id"],
             "text": category["name"]
         } for category in Database.get_tag_categories()]
+
         tag_form = Form(
-            TextInput(form_id = "name"),
+            TextInput(
+                MDTextFieldHintText(text = "Tag Name"),
+                MDTextFieldHelperText(text = "This is the name displayed in tag lists."),
+                form_id = "name"),
             DropdownInput(form_id = "category_id", data = categories),
             orientation = "vertical",
             adaptive_height = True
         )
 
-        def send_tag(data):
-            Database.create_tag(data)
+        complete = MDIconButton(icon = "check", style = "filled")
+        cancel = MDIconButton(icon = "window-close")
 
-        complete = MDButton(
-            MDButtonText(text = "Add Tag")
-        )
-        complete.bind(on_press = lambda *args: send_tag(tag_form.submit()[1]))
-
-        MDDialog(
-            MDDialogHeadlineText(text = "New Tag"),
+        dialog = MDDialog(
+            MDDialogHeadlineText(text = "Tag Information"),
             MDDialogContentContainer(
                 tag_form
             ),
             MDDialogButtonContainer(
+                MDLabel(text = " "),
+                cancel,
                 complete
             )
-        ).open()
+        )
+
+        def send_tag(data):
+            Database.create_tag(data)
+
+        cancel.bind(on_press = lambda *args: self.dismiss())
+        complete.bind(on_press = lambda *args: send_tag(tag_form.submit()[1]))
+
+        dialog.open()
 
     def prefill(self, ids):
-        data = [Database.get_tag(id)[0] for id in ids]
+        data = [Database.get_tag(id) for id in ids]
         for tag in data:
             self.append(tag["id"], tag["name"])
 
