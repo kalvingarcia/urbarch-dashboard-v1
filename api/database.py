@@ -64,7 +64,7 @@ class Database:
             cls._pygres.insert("finishes", finish)
 
         cls._pygres.create("product_listing", {
-            "id": "VARCHAR(7)",
+            "id": "VARCHAR(10)",
             "name": "VARCHAR(255)",
             "description": "TEXT"
         }, primary_key = ["id"])
@@ -75,7 +75,7 @@ class Database:
             "price": "INT",
             "display": "BOOL",
             "overview": "JSONB",
-            "listing_id": "VARCHAR(7)"
+            "listing_id": "VARCHAR(10)"
         }, foreign_key = {"listing_id": "product_listing(id)"})
         cls._pygres.gin("product_variations", columns = ["subname"])
 
@@ -94,7 +94,7 @@ class Database:
         }, foreign_key = {"listing_id": "instock_listing(id)"})
 
         cls._pygres.create("salvage_listing", {
-            "id": "VARCHAR(7)",
+            "id": "VARCHAR(10)",
             "name": "VARCHAR(255)",
             "description": "TEXT",
         }, primary_key = ["id"])
@@ -104,7 +104,7 @@ class Database:
             "price": "INT",
             "display": "BOOL",
             "overview": "JSONB",
-            "listing_id": "VARCHAR(7)"
+            "listing_id": "VARCHAR(10)"
         }, foreign_key = {"listing_id": "salvage_listing(id)"})
 
         # Gallery Related Tables
@@ -114,7 +114,7 @@ class Database:
             "description": "TEXT",
             "customer": "VARCHAR(255)",
             "display": "BOOL",
-            "product_id": "VARCHAR(7)",
+            "product_id": "VARCHAR(10)",
             "variation_extension": "VARCHAR(10)"
         }, primary_key = ["id"], foreign_key = {"product_id": "product_listing(id)"})
         cls._pygres.gin("custom_items", columns = ["name", "description", "customer", "product_id"])
@@ -146,16 +146,18 @@ class Database:
         cls._pygres.gin("tag", columns = ["name"])
 
         cls._pygres.create("product_variation__tag", {
-            "listing_id": "VARCHAR(7)",
+            "listing_id": "VARCHAR(10)",
             "variation_extension": "VARCHAR(10)",
             "tag_id": "INT"
         }, foreign_key = {"listing_id": "product_listing(id)", "tag_id": "tag(id)"})
         cls._pygres.create("instock_listing__tag", {
             "listing_id": "INT",
-            "tag_id": "INT"
+            "item_serial": "INT",
+            "tag_id": "INT",
         }, foreign_key = {"listing_id": "instock_listing(id)", "tag_id": "tag(id)"})
         cls._pygres.create("salvage_listing__tag", {
-            "listing_id": "VARCHAR(7)",
+            "listing_id": "VARCHAR(10)",
+            "item_serial": "INT",
             "tag_id": "INT"
         }, foreign_key = {"listing_id": "salvage_listing(id)", "tag_id": "tag(id)"})
         cls._pygres.create("custom_items__tag", {
@@ -163,7 +165,7 @@ class Database:
             "tag_id": "INT"
         }, foreign_key = {"item_id": "custom_items(id)", "tag_id": "tag(id)"})
 
-        cls._pygres.commit()
+        cls._complete_action()
 
     @classmethod
     def __expand_query(cls, query):
@@ -220,7 +222,7 @@ class Database:
             return cls._pygres.select("tag", columns = columns, where = where, order = "rank DESC")
         except QueryError as error:
             print("Error while attempting to search database: " + str(error))
-            cls._pygres.rollback()
+            cls._error()
             return []
 
     @classmethod
@@ -235,7 +237,7 @@ class Database:
             return []
         except QueryError as error:
             print("Error while attempting to search database: " + str(error))
-            cls._pygres.rollback()
+            cls._error()
             return []
 
     @classmethod
@@ -243,23 +245,36 @@ class Database:
         return cls._pygres.select("finishes")
 
     @classmethod
+    def get_tag_categories(cls):
+        return cls._pygres.select("tag_categories")
+
+    # TAG METHODS
+    @classmethod
     def get_tag_list(cls):
         return cls._pygres.select("tag")
 
     @classmethod
     def get_tag(cls, id):
-        return cls._pygres.select("tag", where = f"id = '{id}'")
-
-    @classmethod
-    def get_tag_categories(cls):
-        return cls._pygres.select("tag_categories")
+        return cls._pygres.select("tag", where = f"id = '{id}'")[0]
 
     @classmethod
     def create_tag(cls, data):
         cls._pygres.insert("tag", data)
         cls._pygres.regin("tag", columns = ["name"])
-        cls._pygres.commit()
+        cls._complete_action()
 
+    @classmethod
+    def update_tag(cls, id, data):
+        cls._pygres.update("tag", data, where = f"id = '{id}'")
+        cls._pygres.regin("tag", columns = ["name"])
+        cls._complete_action()
+
+    @classmethod
+    def delete_tag(cls, id):
+        cls._pygres.delete("tag", where = f"id = '{id}'")
+        cls._complete_action()
+
+    # PRODUCT METHODS
     @classmethod
     def get_product_list(cls, filter_ids: list = None):
         return cls._pygres.select("product_listing")
@@ -275,7 +290,6 @@ class Database:
                 distinct = True,
                 where = f"listing_id = '{id}' AND variation_extension = '{variation["extension"]}'"
             )]
-        print(result)
         return result
 
     @classmethod
@@ -301,10 +315,10 @@ class Database:
                         "tag_id": tag
                     })
 
-            cls._pygres.commit()
+            cls._complete_action()
         except QueryError as error:
             print("Error while attempting to create product: ", error)
-            cls._pygres.rollback()
+            cls._error()
             return error
 
     @classmethod
@@ -324,8 +338,7 @@ class Database:
                 variation["overview"] = json.dumps(variation["overview"])
 
                 where = f"listing_id = '{data["id"]}' AND extension = '{variation["extension"]}'"
-                print(length := len(cls._pygres.select("product_variations", where = where)))
-                if length == 0:
+                if len(cls._pygres.select("product_variations", where = where)) == 0:
                     cls._pygres.insert("product_variations", variation)
                 else:
                     cls._pygres.update("product_variations", variation, where = where)
@@ -351,19 +364,236 @@ class Database:
                 if tag["variation_extension"] not in extensions:
                     cls._pygres.delete("product_variation__tag", where = f"listing_id = '{tag["listing_id"]}' AND variation_extension = '{tag["variation_extension"]}' AND tag_id = '{tag["tag_id"]}'")
 
-            cls._pygres.commit()
+            cls._complete_action()
         except QueryError as error:
             print("Error while attempting to update product: ", error)
-            cls._pygres.rollback()
+            cls._error()
             return error
 
     @classmethod
     def delete_product(cls, id):
-        cls._pygres.delete("product_listing", where = f"id = '{id}'")        
+        cls._pygres.delete("product_listing", where = f"id = '{id}'")
+        cls._complete_action()
+
+    # STOCK METHODS
+    @classmethod
+    def get_stock_list(cls):
+        return cls._pygres.select("instock_listing")
 
     @classmethod
-    def delete_variation(cls, id):
-        cls._pygres.delete("product_variation", where = f"id = '{id}'")
+    def get_stock(cls, id):
+        result = cls._pygres.select("instock_listing", where = f"id = '{id}'")[0]
+        result["items"] = cls._pygres.select("instock_items", where = f"listing_id = '{id}'")
+        for item in result["items"]:
+            item["tags"] = [stock_tag["tag_id"] for stock_tag in cls._pygres.select(
+                "instock_listing__tag",
+                columns = ["tag_id"],
+                distinct = True,
+                where = f"listing_id = '{id}' AND item_serial = '{item["serial"]}'"
+            )]
+        return result
+
+    @classmethod
+    def create_stock(cls, data):
+        try:
+            items = data.pop("items")
+
+            cls._pygres.insert("instock_listing", data)
+
+            for item in items:
+                tags = item.pop("tags")
+
+                item['listing_id'] = data['id']
+                item["overview"] = json.dumps(item["overview"])
+                cls._pygres.insert("instock_items", item)
+
+                for tag in tags:
+                    cls._pygres.insert("instock_listing__tag", {
+                        "listing_id": data['id'],
+                        "item_serial": item['serial'],
+                        "tag_id": tag
+                    })
+
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to create product: ", error)
+            cls._error()
+            return error
+
+    @classmethod
+    def update_stock(cls, id, data):
+        try:
+            items = data.pop("items")
+
+            cls._pygres.update("instock_listing", data, where = f"id = '{id}'")
+
+            serials = set()
+            for item in items:
+                tags = item.pop("tags")
+                serials.add(item["serial"])
+
+                item['listing_id'] = data['id']
+                item["overview"] = json.dumps(item["overview"])
+
+                where = f"listing_id = '{data["id"]}' AND serial = '{item["serial"]}'"
+                if len(cls._pygres.select("instock_items", where = where)) == 0:
+                    cls._pygres.insert("instock_items", item)
+                else:
+                    cls._pygres.update("instock_items", item, where = where)
+
+                for tag in tags:
+                    where = f"listing_id = '{data['id']}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}'"
+                    if len(cls._pygres.select("instock_listing__tag", where = where)) == 0:
+                        cls._pygres.insert("instock_listing__tag", {
+                            "listing_id": data['id'],
+                            "item_serial": item['serial'],
+                            "tag_id": tag
+                        })
+
+            # clean up if extensions get updated
+            # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
+            # but i like to make things hard i guess
+            for item in cls._pygres.select("instock_items", where = f"listing_id = '{data["id"]}'"):
+                if item["serial"] not in serials:
+                    cls._pygres.delete("instock_items", where = f"listing_id = '{item["listing_id"]}' AND extension = '{item["extension"]}'")
+            for tag in cls._pygres.select("instock_listing__tag", where = f"listing_id = '{data["id"]}'"):
+                if tag["item_serial"] not in serials:
+                    cls._pygres.delete("instock_listing__tag", where = f"listing_id = '{tag["listing_id"]}' AND item_serial = '{tag["item_serial"]}' AND tag_id = '{tag["tag_id"]}'")
+
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
+
+    @classmethod
+    def delete_stock(cls, id):
+        cls._pygres.delete("instock_listing", where = f"id = '{id}'")
+        cls._complete_action()
+
+    # SALVAGE METHODS
+    @classmethod
+    def get_salvage_list(cls):
+        return cls._pygres.select("salvage_listing")
+
+    @classmethod
+    def get_salvage(cls, id):
+        result = cls._pygres.select("salvage_listing", where = f"id = '{id}'")[0]
+        result["items"] = cls._pygres.select("salvage_items", where = f"listing_id = '{id}'")
+        for item in result["items"]:
+            item["tags"] = [stock_tag["tag_id"] for stock_tag in cls._pygres.select(
+                "salvage_listing__tag",
+                columns = ["tag_id"],
+                distinct = True,
+                where = f"listing_id = '{id}' AND item_serial = '{item["serial"]}'"
+            )]
+        return result
+
+    @classmethod
+    def create_salvage(cls, data):
+        try:
+            items = data.pop("items")
+
+            cls._pygres.insert("salvage_listing", data)
+            cls._pygres.regin("salvage_listing", columns = ["id", "name", "description"])
+
+            for item in items:
+                tags = item.pop("tags")
+
+                item['listing_id'] = data['id']
+                item["overview"] = json.dumps(item["overview"])
+                cls._pygres.insert("salvage_items", item)
+
+                for tag in tags:
+                    cls._pygres.insert("salvage_listing__tag", {
+                        "listing_id": data['id'],
+                        "item_serial": item['serial'],
+                        "tag_id": tag
+                    })
+
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to create product: ", error)
+            cls._error()
+            return error
+
+    @classmethod
+    def update_salvage(cls, id, data):
+        try:
+            items = data.pop("item")
+
+            cls._pygres.update("salvage_listing", data, where = f"id = '{id}'")
+            cls._pygres.regin("salvage_listing", columns = ["id", "name", "description"])
+
+            serials = set()
+            for item in items:
+                tags = item.pop("tags")
+                serials.add(item["serial"])
+
+                item['listing_id'] = data['id']
+                item["overview"] = json.dumps(item["overview"])
+
+                where = f"listing_id = '{data["id"]}' AND serial = '{item["serial"]}'"
+                if len(cls._pygres.select("salvage_items", where = where)) == 0:
+                    cls._pygres.insert("salvage_items", item)
+                else:
+                    cls._pygres.update("salvage_items", item, where = where)
+
+                for tag in tags:
+                    where = f"listing_id = '{data['id']}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}'"
+                    if len(cls._pygres.select("salvage_items__tag", where = where)) == 0:
+                        cls._pygres.insert("salvage_items__tag", {
+                            "listing_id": data['id'],
+                            "item_serial": item['serial'],
+                            "tag_id": tag
+                        })
+
+            # clean up if extensions get updated
+            # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
+            # but i like to make things hard i guess
+            for item in cls._pygres.select("salvage_items", where = f"listing_id = '{data["id"]}'"):
+                if item["serial"] not in serials:
+                    cls._pygres.delete("salvage_items", where = f"listing_id = '{item["listing_id"]}' AND extension = '{item["extension"]}'")
+            for tag in cls._pygres.select("salvage_items__tag", where = f"listing_id = '{data["id"]}'"):
+                if tag["item_serial"] not in serials:
+                    cls._pygres.delete("salvage_items__tag", where = f"listing_id = '{tag["listing_id"]}' AND item_serial = '{tag["item_serial"]}' AND tag_id = '{tag["tag_id"]}'")
+
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
+
+    @classmethod
+    def delete_salvage(cls, id):
+        cls._pygres.delete("salvage_listing", where = f"id = '{id}'")
+        cls._complete_action()
+
+    # CUSTOM METHODS
+    @classmethod
+    def get_custom_list(cls):
+        return cls.__pygres.select("custom_items")
+
+    @classmethod
+    def get_cutom(cls, id):
+        return cls._pygres.select("custom_items", where = f"id = '{id}'")[0]
+
+    @classmethod
+    def create_custom(cls, data):
+        cls._pygres.insert("custom_items", data)
+        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "product_id"])
+        cls._complete_action()
+
+    @classmethod
+    def update_custom(cls, id, data):
+        cls._pygres.update("custom_items", data, where = f"id = '{id}'")
+        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "product_id"])
+        cls._complete_action()
+
+    @classmethod
+    def delete_custom(cls, id):
+        cls._pygres.delete("custom_items", where = f"id = '{id}'")
+        cls._complete_action()
 
     @classmethod
     def disconnect(cls):
