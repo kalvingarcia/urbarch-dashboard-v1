@@ -15,7 +15,7 @@ class Product(MDScreen):
 
     def on_pre_enter(self):
         if self.__product_id:
-            self.product_form.prefill(self.__product_id)
+            self.__product_form.prefill(self.__product_id)
             self.__product_id = None
         else:
             self.__product_form.default()
