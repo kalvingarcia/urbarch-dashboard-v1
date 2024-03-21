@@ -1,6 +1,5 @@
 from kivy.core.window import Window
 from kivymd.app import MDApp
-from api.kavy.colors import Colors
 from api.appbuilder import AppBuilder
 from api.database import Database
 
@@ -19,6 +18,7 @@ class DashApp(MDApp):
         # binding the close function
         Window.bind(on_request_close = self.on_request_close)
         Window.size = (1600, 900)
+        Window.minimum_width, Window.minimum_height = (1600, 900)
 
     def build(self):
         self.title = "Urban Dash"
