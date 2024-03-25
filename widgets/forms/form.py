@@ -196,7 +196,7 @@ class CheckboxInput(FormStructure, MDBoxLayout):
     def __init__(self, *args, label = None, value = None, group = None, on_submit = None, active = False, **kwargs):
         super(CheckboxInput, self).__init__(*args, **kwargs)
 
-        self.value = value if value is not None else self.form_id
+        self.value = value if value is not None else self.form_id if self.form_id is not None else label
 
         self.__on_submit = on_submit
 
@@ -592,4 +592,9 @@ class TabForm(MDTabsPrimary, FormStructure):
             self.ids.container.remove_widget(tab)
             return True
         return False
+
+    def duplicate_tab(self):
+        tab = self.get_current_tab()
+        if tab is not None:
+            self.add_tab(tab._tab_content.submit()[1])
 

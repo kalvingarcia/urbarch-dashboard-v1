@@ -86,6 +86,7 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
                 MDLabel(text = "UL Info", adaptive_size = True),
                 CheckGroup(
                     CheckboxInput(label = "Dry Environments", value = "Dry", group = f"UL_{self.default_name}", adaptive_height = True),
+                    CheckboxInput(label = "Damp Environments", value = "Damp", group = f"UL_{self.default_name}", adaptive_height = True),
                     CheckboxInput(label = "Wet Environments", value = "Wet", group = f"UL_{self.default_name}",  adaptive_height = True),
                     CheckboxInput(label = "None", group = f"UL_{self.default_name}", active = True,  adaptive_height = True),
                     form_id = "ul_info",
@@ -179,6 +180,11 @@ class ProductForm(FormStructure, MDBoxLayout):
             variation_forms.add_tab()
             self.variation_number += 1
 
+        def duplicate_variation_form():
+            VariationForm.change_variation_number(self.variation_number)
+            variation_forms.duplicate_tab()
+            self.variation_number += 1
+
         def remove_variation_form():
             if variation_forms.remove_tab():
                 self.variation_number -= 1
@@ -190,6 +196,12 @@ class ProductForm(FormStructure, MDBoxLayout):
             pos_hint = {"center_x": 0.5, "center_y": 0.5},
         )
         add_tab.bind(on_press = lambda *args: add_variation_form())
+        duplicate_tab = MDIconButton(
+            icon = "content-duplicate",
+            style = "standard",
+            pos_hint = {"center_x": 0.5, "center_y": 0.5},
+        )
+        duplicate_tab.bind(on_press = lambda *args: duplicate_variation_form())
         remove_tab = MDIconButton(
             icon = "minus",
             style = "outlined",
@@ -221,6 +233,7 @@ class ProductForm(FormStructure, MDBoxLayout):
         self.add_widget(MDBoxLayout(
             MDBoxLayout(
                 add_tab,
+                duplicate_tab,
                 remove_tab,
                 adaptive_height = True,
                 spacing = "10dp",
