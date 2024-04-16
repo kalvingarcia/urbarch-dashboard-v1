@@ -26,11 +26,15 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
 
         self.__form = Form(
             Form(
-                TextInput(
-                    MDTextFieldHintText(text = "Variant Name"),
-                    MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"ADA\""),
-                    on_text_change = self.rename_tab,
-                    form_id = "subname"
+                Form(
+                    TextInput(
+                        MDTextFieldHintText(text = "Variant Name"),
+                        MDTextFieldHelperText(text = "Example: for \"Loft Light [ADA]\", it would be \"ADA\""),
+                        on_text_change = self.rename_tab,
+                        form_id = "subname"
+                    ),
+                    SwitchInput(label = "Featured", form_id = "featured", size_hint_x = 0.25),
+                    adaptive_height = True
                 ),
                 Form(
                     TextInput(
@@ -191,7 +195,7 @@ class ProductForm(FormStructure, MDBoxLayout):
                 VariationForm.change_variation_number(self.variation_number)
 
         add_tab = MDIconButton(
-            icon = "plus",
+            icon = "pencil-plus",
             style = "tonal",
             pos_hint = {"center_x": 0.5, "center_y": 0.5},
         )
@@ -203,13 +207,13 @@ class ProductForm(FormStructure, MDBoxLayout):
         )
         duplicate_tab.bind(on_press = lambda *args: duplicate_variation_form())
         remove_tab = MDIconButton(
-            icon = "minus",
+            icon = "trash-can",
             style = "outlined",
             pos_hint = {"center_x": 0.5, "center_y": 0.5},
         )
         remove_tab.bind(on_press = lambda *args: remove_variation_form())
         submit = MDIconButton(
-            icon = "check",
+            icon = "content-save",
             style = "filled",
             pos_hint = {"center_x": 0.5, "center_y": 0.5},
         )
@@ -233,8 +237,8 @@ class ProductForm(FormStructure, MDBoxLayout):
         self.add_widget(MDBoxLayout(
             MDBoxLayout(
                 add_tab,
-                duplicate_tab,
                 remove_tab,
+                duplicate_tab,
                 adaptive_height = True,
                 spacing = "10dp",
                 size_hint_x = 0.5
