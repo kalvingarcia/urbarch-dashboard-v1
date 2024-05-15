@@ -128,7 +128,7 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
         form_data = self.__form.submit()[1]
 
         overview = {}
-        for key in ["finishes", "options", "replacement_ids", "ul_info", "specifications", "notes"]:
+        for key in ["finishes", "options", "bulb_type", "replacement_ids", "ul_info", "specifications", "notes"]:
             overview[key] = form_data.pop(key)
         form_data["overview"] = overview
 
