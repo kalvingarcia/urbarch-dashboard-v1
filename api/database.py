@@ -228,10 +228,10 @@ class Database:
     @classmethod
     def search_components(cls, text: str):
         try:
-            component_tag_id = cls._pygres.select("tag", where = f"name = 'component'")["id"]
+            component_tag_id = cls._pygres.select("tag", where = f"name = 'Replacement'")[0]["id"]
             if text == "":
-                variations_by_tag = cls._pygres.select("product_vatiation__tag", where = f"tag_id = {component_tag_id}")
-                where = " OR ".join([f"id = {variation["listing_id"]}" for variation in variations_by_tag])
+                variations_by_tag = cls._pygres.select("product_variation__tag", where = f"tag_id = {component_tag_id}")
+                where = " OR ".join([f"id = '{variation["listing_id"]}'" for variation in variations_by_tag])
                 return cls._pygres.select("product_listing", where = where)
             
             return []
@@ -290,6 +290,7 @@ class Database:
                 distinct = True,
                 where = f"listing_id = '{id}' AND variation_extension = '{variation["extension"]}'"
             )]
+
         return result
 
     @classmethod
@@ -575,7 +576,7 @@ class Database:
         return cls.__pygres.select("custom_items")
 
     @classmethod
-    def get_cutom(cls, id):
+    def get_custom(cls, id):
         return cls._pygres.select("custom_items", where = f"id = '{id}'")[0]
 
     @classmethod
