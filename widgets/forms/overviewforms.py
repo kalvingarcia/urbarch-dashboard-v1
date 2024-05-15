@@ -101,7 +101,7 @@ class ReplacementForm(SearchForm):
         return Database.search_components(text)
 
     def prefill(self, ids):
-        data = [Database.get_product(id)[0] for id in ids]
+        data = [Database.get_product(id) for id in ids]
         for tag in data:
             self.append(tag["id"], tag["name"])
 
