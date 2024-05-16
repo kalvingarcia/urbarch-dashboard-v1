@@ -1,6 +1,7 @@
 import json
 import re
 from os import system
+import psycopg2 as postgres
 
 class Pygres:
     def __init__(self, database: str, user: str, password: str, host: str, port: str, ssl_mode: str):
@@ -68,223 +69,208 @@ class Database:
 
     @classmethod
     def initialize(cls):
-        cls._pygres.extend("pg_trgm")
+        cls._pygres("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
 
         # Product Related Tables
-        cls._pygres.create("finishes", {
-            "id": "VARCHAR(5)",
-            "name": "VARCHAR(255)",
-            "outdoor": "BOOL"
-        })
-        finishes = [
-            {"id": "PB", "name": "Polished Brass", "outdoor": "YES"},
-            {"id": "PN", "name": "Polished Nickel", "outdoor": "YES"},
-            {"id": "GP", "name": "Green Patina", "outdoor": "YES"},
-            {"id": "BP", "name": "Brown Patina", "outdoor": "YES"},
-            {"id": "AB", "name": "Antique Brass", "outdoor": "YES"},
-            {"id": "SN", "name": "Satin Nickel", "outdoor": "YES"},
-            {"id": "LP", "name": "Light Pewter", "outdoor": "YES"},
-            {"id": "STBR", "name": "Statuary Brown", "outdoor": "NO"},
-            {"id": "STBL", "name": "Statuary Black", "outdoor": "NO"},
-            {"id": "PC", "name": "Polished Chrome", "outdoor": "YES"},
-            {"id": "BN", "name": "Black Nickel", "outdoor": "YES"}
-        ]
-        for finish in finishes:
-            cls._pygres.insert("finishes", finish)
+        cls._pygres.create('''
+            CREATE TABLE IF NOT EXISTS finishes(
+                id VARCHAR(5),
+                name VARCHAR(255),
+                outdoor BOOL
+            );
+        ''')
+        cls._pygres(f'''
+            INSERT INTO finishes(id, name, outdoor)
+            VALUES {", ".join([
+                ("PB", "Polished Brass", "YES"),
+                ("PN", "Polished Nickel", "YES"),
+                ("GP", "Green Patina", "YES"),
+                ("BP", "Brown Patina", "YES"),
+                ("AB", "Antique Brass", "YES"),
+                ("SN", "Satin Nickel", "YES"),
+                ("LP", "Light Pewter", "YES"),
+                ("STBR", "Statuary Brown", "NO"),
+                ("STBL", "Statuary Black", "NO"),
+                ("PC", "Polished Chrome", "YES"),
+                ("BN", "Black Nickel", "YES")
+            ])};
+        ''')
 
-        cls._pygres.create("product_listing", {
-            "id": "VARCHAR(10)",
-            "name": "VARCHAR(255)",
-            "description": "TEXT"
-        }, primary_key = ["id"])
-        cls._pygres.gin("product_listing", columns = ["id", "name", "description"])
-        cls._pygres.create("product_variations", {
-            "extension": "VARCHAR(10)",
-            "subname": "VARCHAR(255)",
-            "price": "INT",
-            "display": "BOOL",
-            "overview": "JSONB",
-            "listing_id": "VARCHAR(10)"
-        }, foreign_key = {"listing_id": "product_listing(id)"})
-        cls._pygres.gin("product_variations", columns = ["subname"])
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS product_listing(
+                id VARCHAR(10) PRIMARY KEY,
+                name VARCHAR(255),
+                description TEXT
+            );
+        ''')
+        cls._pygres("ALTER TABLE IF EXISTS product_listing ADD COLUMN IF NOT EXISTS index tsvector;")
+        cls._pygres(f'''
+            UPDATE product_listing SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["id", "name", "description"]])});
+        ''')
+        cls._pygres("CREATE INDEX IF NOT EXISTS product_listing_index ON product_listing USING GIN(index);")
 
-        cls._pygres.create("instock_listing", {
-            "id": "SERIAL",
-            "sale": "BOOL",
-            "price": "INT",
-            "product_id": "VARCHAR(7)",
-            "variation_extension": "VARCHAR(10)"
-        }, primary_key = ["id"], foreign_key = {"product_id": "product_listing(id)"})
-        cls._pygres.create("instock_items", {
-            "serial": "INT",
-            "display": "BOOL",
-            "overview": "JSONB",
-            "listing_id": "INT"
-        }, foreign_key = {"listing_id": "instock_listing(id)"})
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS product_variation(
+                extension VARCHAR(10),
+                subname VARCHAR(255),
+                price INT,
+                display BOOL,
+                overview JSONB,
+                listing_id VARCHAR(10) REFERENCES product_listing(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
+        cls._pygres("ALTER TABLE IF EXISTS product_variation ADD COLUMN IF NOT EXISTS index tsvector;")
+        cls._pygres(f'''
+            UPDATE product_variation SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["subname"]])});
+        ''')
+        cls._pygres("CREATE INDEX IF NOT EXISTS product_variation_index ON product_variation USING GIN(index);")
 
-        cls._pygres.create("salvage_listing", {
-            "id": "VARCHAR(10)",
-            "name": "VARCHAR(255)",
-            "description": "TEXT",
-        }, primary_key = ["id"])
-        cls._pygres.gin("salvage_listing", columns = ["id", "name", "description"])
-        cls._pygres.create("salvage_items", {
-            "serial": "INT",
-            "price": "INT",
-            "display": "BOOL",
-            "overview": "JSONB",
-            "listing_id": "VARCHAR(10)"
-        }, foreign_key = {"listing_id": "salvage_listing(id)"})
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS instock_listing(
+                id SERIAL PRIMARY KEY,
+                sale BOOL,
+                price INT,
+                listing_id VARCHAR(7) REFERENCES product_listing(id) ON DELETE CASCADE ON UPDATE CASCADE,
+                variation_extension VARCHAR(10)
+            );
+        ''')
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS instock_items(
+                serial INT,
+                display BOOL,
+                overview JSONB,
+                listing_id INT REFERENCES instock_listing(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
+
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS salvage_listing(
+                id VARCHAR(10) PRIMARY KEY,
+                name VARCHAR(255),
+                description TEXT
+            );
+        ''')
+        cls._pygres("ALTER TABLE IF EXISTS salvage_listing ADD COLUMN IF NOT EXISTS index tsvector;")
+        cls._pygres(f'''
+            UPDATE salvage_listing SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["id", "name", "description"]])});
+        ''')
+        cls._pygres("CREATE INDEX IF NOT EXISTS salvage_listing_index ON salvage_listing USING GIN(index);")
+
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS salvage_item(
+                serial INT,
+                price INT,
+                display BOOL,
+                overview JSONB,
+                listing_id VARCHAR(10) REFERENCES salvage_listing(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
 
         # Gallery Related Tables
-        cls._pygres.create("custom_items", {
-            "id": "SERIAL",
-            "name": "VARCHAR(255)",
-            "description": "TEXT",
-            "customer": "VARCHAR(255)",
-            "display": "BOOL",
-            "product_id": "VARCHAR(10)",
-            "variation_extension": "VARCHAR(10)"
-        }, primary_key = ["id"], foreign_key = {"product_id": "product_listing(id)"})
-        cls._pygres.gin("custom_items", columns = ["name", "description", "customer", "product_id"])
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS custom_item(
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255),
+                description TEXT,
+                customer VARCHAR(255),
+                display BOOL,
+                listing_id VARCHAR(10) REFERENCES product_listing(id) ON DELETE CASCADE ON UPDATE CASCADE,
+                variation_extension VARCHAR(10)
+            );
+        ''')
+        cls._pygres("ALTER TABLE IF EXISTS custom_item ADD COLUMN IF NOT EXISTS index tsvector;")
+        cls._pygres(f'''
+            UPDATE custom_item SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["name", "description", "customer", "product_id"]])});
+        ''')
+        cls._pygres("CREATE INDEX IF NOT EXISTS custom_item_index ON custom_item USING GIN(index);")
 
         # Tag Related Tables
-        cls._pygres.create("tag_categories", {
-            "id": "SERIAL",
-            "name": "VARCHAR(255)",
-            "description": "TEXT"
-        }, primary_key = ["id"])
-        categories = [
-            {"name": "Class", "description": "Whether the item is a(n) Lighting, Bathroom, Washstands, Furnishing, Mirrors, Cabinets, Display, Hardware, Tile"},
-            {"name": "Category", "description": "The order of the classification, such as sconce, hanging, flushmount, etc."},
-            {"name": "Style", "description": "The artistic period that the item is from."},
-            {"name": "Family", "description": "The stuctural grouping of the item, such as \"torch\" for Loft Light, Urban Torch, etc."},
-            {"name": "Designer", "description": "The name of the designer who created the piece."},
-            {"name": "Material", "description": "The type of materials used to create the item, such as alabaster, marble, aluminum, brass, etc."},
-            {"name": "Distinction", "description": "Specifically for lighting used to distinguish exterior and interior."},
-            {"name": "Environmental", "description": "Specifies any environmental conditions the item can be used in, such as waterproof."}
-        ]
-        for category in categories:
-            cls._pygres.insert("tag_categories", category)
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS tag_category(
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255),
+                description TEXT
+            );
+        ''')
+        cls._pygres(f'''
+            INSERT INTO tag_category(name, description)
+            VALUES {", ".join([
+                ("Class", "Whether the item is a(n) Lighting, Bathroom, Washstands, Furnishing, Mirrors, Cabinets, Display, Hardware, Tile"),
+                ("Category", "The order of the classification, such as sconce, hanging, flushmount, etc."),
+                ("Style", "The artistic period that the item is from."),
+                ("Family", "The stuctural grouping of the item, such as \"torch\" for Loft Light, Urban Torch, etc."),
+                ("Designer", "The name of the designer who created the piece."),
+                ("Material", "The type of materials used to create the item, such as alabaster, marble, aluminum, brass, etc."),
+                ("Distinction", "Specifically for lighting used to distinguish exterior and interior."),
+                ("Environmental", "Specifies any environmental conditions the item can be used in, such as waterproof.")
+            ])};
+        ''')
 
-        cls._pygres.create("tag", {
-            "id": "SERIAL",
-            "name": "VARCHAR(255)",
-            "category_id": "INT"
-        }, primary_key = ["id"], foreign_key = {"category_id": "tag_categories(id)"})
-        cls._pygres.gin("tag", columns = ["name"])
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS tag(
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255),
+                category_id INT REFERENCES tag_category(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
+        cls._pygres("ALTER TABLE IF EXISTS tag ADD COLUMN IF NOT EXISTS index tsvector;")
+        cls._pygres(f'''
+            UPDATE tag SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["name"]])});
+        ''')
+        cls._pygres("CREATE INDEX IF NOT EXISTS tag_index ON tag USING GIN(index);")
 
-        cls._pygres.create("product_variation__tag", {
-            "listing_id": "VARCHAR(10)",
-            "variation_extension": "VARCHAR(10)",
-            "tag_id": "INT"
-        }, foreign_key = {"listing_id": "product_listing(id)", "tag_id": "tag(id)"})
-        cls._pygres.create("instock_listing__tag", {
-            "listing_id": "INT",
-            "item_serial": "INT",
-            "tag_id": "INT",
-        }, foreign_key = {"listing_id": "instock_listing(id)", "tag_id": "tag(id)"})
-        cls._pygres.create("salvage_listing__tag", {
-            "listing_id": "VARCHAR(10)",
-            "item_serial": "INT",
-            "tag_id": "INT"
-        }, foreign_key = {"listing_id": "salvage_listing(id)", "tag_id": "tag(id)"})
-        cls._pygres.create("custom_items__tag", {
-            "item_id": "INT",
-            "tag_id": "INT"
-        }, foreign_key = {"item_id": "custom_items(id)", "tag_id": "tag(id)"})
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS product_variation__tag(
+                listing_id VARCHAR(10) REFERENCES product_listing(id) ON DELETE CASCADE ON UPDATE CASCADE,
+                variation_extension VARCHAR(10),
+                tag_id INT REFERENCES tag(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS instock_item__tag(
+                listing_id INT REFERENCES instock_listing(id) ON DELETE CASCADE ON UPDATE CASCADE,
+                item_serial INT,
+                tag_id INT REFERENCES tag(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS salvage_item__tag(
+                listing_id VARCHAR(10) REFERENCES salvage_listing(id) ON DELETE CASCADE ON UPDATE CASCADE,
+                item_serial INT,
+                tag_id INT REFERENCES tag(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
+        cls._pygres('''
+            CREATE TABLE IF NOT EXISTS custom_item__tag(
+                item_id INT REFERENCES custom_item(id) ON DELETE CASCADE ON UPDATE CASCADE,
+                tag_id INT REFERENCES tag(id) ON DELETE CASCADE ON UPDATE CASCADE
+            );
+        ''')
 
         cls._complete_action()
 
-    @classmethod
-    def __expand_query(cls, query):
-        def autocorrect(word):
-            if pattern.search(word) is not None or word.lower() in word_list:
-                return word
-            return min(word_list, key = lambda x: edit_distance(x, word.lower()))
-
-        def preprocess(query):
-            words = word_tokenize(' '.join([autocorrect(word) for word in query.split()]))
-
-            stop_words = set(stopwords.words("english"))
-            words = [word for word in words if word.lower() not in stop_words]
-
-            return ' '.join(words)
-
-        def expand(query):
-            expanded_query = []
-            for word in query.split():
-                word_synonyms = set([synonym.name().replace('_', ' ').split('.')[0] for synonym in wordnet.synsets(word)])
-                word_synonyms.add(word)
-                expanded_query.append("(" + " | ".join(word_synonyms) + ")")
-            
-            return " & ".join(expanded_query)
-
-        return expand(preprocess(query))
-
-    @classmethod
-    def search_products(cls, text: str):
-        search_text = text # cls.__expand_query(text)
-        
-        columns = ["*", f"ts_rank(index, plainto_tsquery('english', '{search_text}')) AS rank"]
-        where = f"index @@ plainto_tsquery('english', '{search_text}')"
-        results = cls._pygres.select("product_listing", columns = columns, where = where, order = "rank DESC")
-
-        columns = ["listing_id", f"ts_rank(index, plainto_tsquery('english', '{search_text}')) AS rank"]
-        where = f"index @@ plainto_tsquery('english', '{search_text}')"
-        intermediate = cls._pygres.select("product_variations", columns = columns, where = where, order = "rank DESC")
-        intermediate = ' OR '.join([f"id = {id}" for id in [result["listing_id"] for result in intermediate]])
-
-        results += cls._pygres.select("product_listing", where = intermediate)
-
-        seen = set()
-        return [result for result in results if not (result["id"] in seen or seen.add(result["id"]))]
-
-    @classmethod
-    def search_tags(cls, text: str):
-        try:
-            if text == '':
-                return cls._pygres.select("tag")
-            search_text = text # cls.__expand_query(text)
-            columns = ["*", f"ts_rank(index, plainto_tsquery('english', '{search_text}')) AS rank"]
-            where = f"index @@ plainto_tsquery('english', '{search_text}')"
-            return cls._pygres.select("tag", columns = columns, where = where, order = "rank DESC")
-        except QueryError as error:
-            print("Error while attempting to search database: " + str(error))
-            cls._error()
-            return []
-
-    @classmethod
-    def search_components(cls, text: str):
-        try:
-            component_tag_id = cls._pygres.select("tag", where = f"name = 'Replacement'")[0]["id"]
-            if text == "":
-                variations_by_tag = cls._pygres.select("product_variation__tag", where = f"tag_id = {component_tag_id}")
-                where = " OR ".join([f"id = '{variation["listing_id"]}'" for variation in variations_by_tag])
-                return cls._pygres.select("product_listing", where = where)
-            
-            return []
-        except QueryError as error:
-            print("Error while attempting to search database: " + str(error))
-            cls._error()
-            return []
+        # REGIN f'''
+        #   UPDATE {}} 
+        #   SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in []])})
+        #   WHERE id = {};
+        # '''
 
     @classmethod
     def get_metal_finishes_list(cls):
-        return cls._pygres.select("finishes")
+        return []
 
     @classmethod
-    def get_tag_categories(cls):
-        return cls._pygres.select("tag_categories")
+    def get_tag_category_list(cls):
+        return []
 
     # TAG METHODS
     @classmethod
     def get_tag_list(cls):
-        return cls._pygres.select("tag")
+        return []
 
     @classmethod
     def get_tag(cls, id):
-        return cls._pygres.select("tag", where = f"id = '{id}'")[0]
+        return []
 
     @classmethod
     def create_tag(cls, data):
@@ -305,22 +291,104 @@ class Database:
 
     # PRODUCT METHODS
     @classmethod
-    def get_product_list(cls, filter_ids: list = None):
-        return cls._pygres.select("product_listing")
+    def get_product_list(cls, search: str = "", filters: dict = {}):
+        try:
+            cls._pygres(f'''
+                {
+                    f'''
+                        WITH search_filtered AS (
+                            SELECT DISTINCT product_variation.listing_id AS id, product_variation.extension AS extension
+                            FROM product_listing INNER JOIN product_variation ON product_variation.listing_id = product_listing.id
+                            WHERE product_listing.index @@ to_tsquery({search + ':*'}) OR product_variation.index @@ to_tsquery({search + ':*'})
+                        ),
+                    ''' if search != "" 
+                    else ""
+                }
+                {
+                    f'''
+                        {"WITH" if search == "" else ""} tag_filtered AS (
+                            {" INTERSECT ".join([
+                                f'''
+                                    SELECT DISTINCT product_variation__tag.listing_id AS id, product_variation__tag.variation_extension AS extension
+                                    FROM product_variation__tag
+                                    WHERE tag_id = ANY ARRAY[{", ".join([f"'{id}'" for id in ids])}]
+                                ''' for ids in filters.values()
+                            ])}
+                        ),
+                    '''
+                }
+                {"WITH" if search == "" and len(filters) == 0 else ""} categories AS (
+                    /* Create a table with the tag name and listing id */
+                    SELECT DISTINCT listing_id AS id, tag.name AS category
+                    FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id  /* First we combine the tag and tag category information */
+                        INNER JOIN product_variation__tag ON product_variation__tag.tag_id = tag.id /* Then we combine the tags specific to the variations we have */
+                    WHERE tag_category.name = 'Class'
+                ), results AS (
+                    SELECT id, extension, name, subname, category, price, featured
+                    FROM product_listing INNER JOIN product_variation ON product_listing.id = product_variation.listing_id
+                        INNER JOIN categories USING(id)
+                        {"INNER JOIN search_filtered USING(id, extension)" if search != "" else ""}
+                        {"INNER JOIN tag_filtered USING(id, extension)" if len(filters) != 0 else ""}
+                    WHERE display = TRUE
+                )
+                SELECT DISTINCT id, name, category
+                FROM results;
+            ''')
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "name", "category"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
+
 
     @classmethod
     def get_product(cls, id):
-        result = cls._pygres.select("product_listing", where = f"id = '{id}'")[0]
-        result["variations"] = cls._pygres.select("product_variations", where = f"listing_id = '{id}'")
-        for variation in result["variations"]:
-            variation["tags"] = [product_tag["tag_id"] for product_tag in cls._pygres.select(
-                "product_variation__tag",
-                columns = ["tag_id"],
-                distinct = True,
-                where = f"listing_id = '{id}' AND variation_extension = '{variation["extension"]}'"
-            )]
+        try:
+            cls._pygres(f'''
+                WITH variations AS (
+                    SELECT extension, subname, price, overview, (
+                        SELECT json_agg(json_build_object(
+                            'id', tag.id,
+                            'name', tag.name,
+                            'category_id', tag_category.name,
+                            'listing_id', product_variation__tag.listing_id
+                        )) FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id
+                            INNER JOIN product_variation__tag ON product_variation__tag.tag_id = tag.id
+                        WHERE product_variation__tag.listing_id = '0' AND product_variation__tag.variation_extension = extension
+                    ) AS tags, (
+                        SELECT json_agg(json_build_object(
+                            'id', product_listing.id,
+                            'extension', product_variation.extension,
+                            'name', product_listing.name,
+                            'subname', product_variation.subname,
+                            'price', product_variation.price
+                        )) FROM product_listing INNER JOIN product_variation ON product_listing.id = product_variation.listing_id
+                        WHERE (product_listing.id, product_variation.extension) IN (
+                            SELECT id, extension
+                            FROM json_populate_recordset('{{"id": TEXT, "extension": TEXT}}', overview->'replacement_ids')
+                        )
+                    ) AS replacements
+                    FROM product_variations WHERE listing_id = '{id}' AND display = TRUE
+                )
+                SELECT id, name, description, (
+                    SELECT json_agg(json_build_object(
+                        'extension', extension,
+                        'subname', subname,
+                        'price', price,
+                        'overview', overview,
+                        'tags', tags
+                    )) FROM variations
+                ) as variations
+                FROM product_listing WHERE id = '{id}';
+            ''')
 
-        return result
+            result = cls._pygres.fetch()[0]
+            return {key: value for key, value in zip(["id", "name", "description", "variations"], result)}
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
     @classmethod
     def create_product(cls, data):
@@ -628,3 +696,18 @@ class Database:
     @classmethod
     def disconnect(cls):
         cls._pygres.close()
+
+class ConnectionError(Exception):
+    pass
+
+class QueryError(Exception):
+    pass
+
+class FetchError(Exception):
+    pass
+
+class RollbackError(Exception):
+    pass
+
+class CommitError(Exception):
+    pass
