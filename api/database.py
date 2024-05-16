@@ -1,14 +1,43 @@
 import json
 import re
 from os import system
-import nltk
-from nltk.corpus import brown, words, wordnet, stopwords
-from nltk.tokenize import word_tokenize
-from nltk.metrics import edit_distance
-from .pygres import PygreSQL, FetchError, QueryError, CommitError, RollbackError, ConnectionError
 
-word_list = set(words.words() + brown.words())
-pattern = re.compile(r"^\*.+\*$")
+class Pygres:
+    def __init__(self, database: str, user: str, password: str, host: str, port: str, ssl_mode: str):
+        try:
+            connection_string = f"postgresql://{user}:{password}@{host}:{port}/{database}?sslmode={ssl_mode}"
+            self._connection = postgres.connect(connection_string)
+            self._cursor = self._connection.cursor()
+        except Exception as error:
+            raise ConnectionError("Error while connecting to database: " + str(error))
+
+    def __call__(self, query: str):
+        try:
+            self._cursor.execute(query)
+        except Exception as error:
+            raise QueryError("Error while executing query: " + str(error))
+
+    def fetch(self):
+        try:
+            return self._cursor.fetchall()
+        except Exception as error:
+            raise FetchError("Error while attempting to fetch from cursor: " + str(error))
+
+    def rollback(self):
+        try:
+            self._connection.rollback()
+        except Exception as error:
+            raise RollbackError("Error when attempting to rollback database: " + str(error))
+
+    # this function commits the changes to the 
+    def commit(self):
+        try:
+            self._connection.commit()
+        except Exception as error:
+            raise CommitError("Error while attempting to commit: " + str(error))
+
+    def close(self):
+        self._connection.close()
 
 class Database:
     _pygres = None
