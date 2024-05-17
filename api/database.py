@@ -250,33 +250,158 @@ class Database:
 
     @classmethod
     def get_tag_category_list(cls):
-        return []
+        try:
+            cls._pygres("SELECT * FROM tag_category;")
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "name", "description"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
     # TAG METHODS
     @classmethod
-    def get_tag_list(cls):
-        return []
+    def get_filter_list(cls, of = "products", search: str = "", filters: dict = {}):
+        try:
+            cls._pygres(f'''
+                {
+                    f'''
+                        WITH search_filtered AS (
+                            SELECT DISTINCT product_variation.listing_id AS listing_id, product_variation.extension as variation_extension
+                            FROM product_listing INNER JOIN product_variation ON product_variation.listing_id = product_listing.id
+                            WHERE product_listing.index @@ to_tsquery({search + ':*'}) OR product_variation.index @@ to_tsquery({search + ':*'})
+                        ),
+                    ''' if search != ""
+                    else ""
+                }
+                {
+                    f'''
+                        {"WITH" if search == "" else ""} tag_filtered AS (
+                            {" INTERSECT ".join([
+                                f'''
+                                    SELECT DISTINCT listing_id, variation_extension
+                                    FROM product_variation__tag
+                                    WHERE tag_id = ANY ARRAY[{", ".join([f"'{id}'" for id in ids])}]
+                                '''
+                            ] for ids in filters.values())}
+                        ),
+                    ''' if len(filters) != 0
+                    else ""
+                }
+                {"WITH" if search == "" and len(filters) == 0 else ""} variations AS (
+                    SELECT DISTINCT listing_id, variation_extension
+                    FROM product_variation__tag
+                        {"INNER JOIN search_filtered USING(listing_id, variation_extension)" if search != "" else ""}
+                        {"INNER JOIN tag_filtered USING(listing_id, variation_extension)" if len(filters) != 0 else ""}
+                )
+                SELECT id, name, (
+                    SELECT COALESCE(json_agg(json_build_object(
+                        'id', CAST(tag.id AS TEXT),
+                        'name', tag.name,
+                        'category', tag_category.name
+                    )), '[]') FROM tag
+                    WHERE tag.category_id = tag_category.id AND (tag.id IN (
+                        SELECT DISTINCT tag_id 
+                        FROM product_variation__tag
+                        WHERE (listing_id, variation_extension) IN (SELECT listing_id, variation_extension FROM variations)
+                    ) OR tag_category.name = 'Class')
+                ) AS tags
+                FROM tag_category;
+            ''')
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "name", "tags"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
+
+    @classmethod
+    def get_tag_list(cls, search: str = ""):
+        try:
+            cls._pygres(f'''
+                {
+                    f'''
+                        WITH search_filtered AS (
+                            SELECT DISTINCT id FROM tag WHERE index @@ to_tsquery({search + ':*'})
+                        ),
+                    ''' if search != ""
+                    else ""
+                }
+                SELECT tag.id AS id, tag.name AS name, tag_category.name AS category
+                FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id
+                {"WHERE tag.id IN (SELECT * FROM search_filtered)" if search != "" else ""};
+            ''')
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "name", "category"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
     @classmethod
     def get_tag(cls, id):
-        return []
+        try:
+            cls._pygres(f"SELECT * FROM tag WHERE id = '{id}';")
+            result = cls._pygres.fetch()[0]
+            return {key: value for key, value in zip(["id", "name", "category_id"], result)}
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
+    # REGIN f'''
+    #   UPDATE {}} 
+    #   SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in []])})
+    #   WHERE id = {};
+    # '''
     @classmethod
-    def create_tag(cls, data):
-        cls._pygres.insert("tag", data)
-        cls._pygres.regin("tag", columns = ["name"])
-        cls._complete_action()
+    def create_tag(cls, data: dict):
+        try:
+            columns = ", ".join(data.keys())
+            values = tuple(data.values())
+
+            cls._pygres(f"INSERT INTO tag({columns}) VALUES {values} RETURNING id;")
+            id = cls._pygres.fetch()[0][0]
+            cls._pygres(f'''
+                UPDATE tag
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["name"]])})
+                WHERE id = '{id}';
+            ''')
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
     @classmethod
     def update_tag(cls, id, data):
-        cls._pygres.update("tag", data, where = f"id = '{id}'")
-        cls._pygres.regin("tag", columns = ["name"])
-        cls._complete_action()
+        try: 
+            cls._pygres(f'''
+                UPDATE tag
+                SET {", ".join([f"{key} = '{value}'" for key, value in data.items()])}
+                WHERE id = '{id}' RETURNING id;
+            ''')
+            id = cls._pygres.fetch()[0][0]
+            cls._pygres(f'''
+                UPDATE tag
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["name"]])})
+                WHERE id = '{id}';
+            ''')
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
     @classmethod
     def delete_tag(cls, id):
-        cls._pygres.delete("tag", where = f"id = '{id}'")
-        cls._complete_action()
+        try:
+            cls._pygres(f"DELETE FROM tag WHERE id = '{id}';")
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
     # PRODUCT METHODS
     @classmethod

@@ -19,7 +19,7 @@ class TagForm(MDDialog, FormStructure):
         categories = [{
             "value": category["id"],
             "text": category["name"]
-        } for category in Database.get_tag_categories()]
+        } for category in Database.get_tag_category_list()]
 
         self.__form = Form(
             TextInput(
@@ -60,6 +60,7 @@ class TagForm(MDDialog, FormStructure):
         if self.__old_tag_id:
             Database.update_tag(self.__old_tag_id, self.__form.submit()[1])
         else:
+            print(self.__form.submit()[1])
             Database.create_tag(self.__form.submit()[1])
         self.__old_tag_id = None
         if self.__on_submit:
@@ -81,7 +82,7 @@ class AllTags(MDScreen):
         home.bind(on_press = lambda *args: self._switch("home"))
 
         self.data_window = DataWindow(
-            DataHeader(columns = ["id", "name", "category_id"]
+            DataHeader(columns = ["id", "name", "category"]
         ))
         self.add_widget(MDBoxLayout(
             MDBoxLayout(
@@ -139,7 +140,7 @@ class AllTags(MDScreen):
             dialog.open()
 
         self.data_window.update(
-            Database.get_tag_list(), 
+            Database.get_tag_list(),
             lambda data: edit_tag(data["id"]) if "id" in data.keys() else self._switch("home"),
             lambda data: delete_tag(data["id"]) if "id" in data.keys() else self._switch("home")
         )
