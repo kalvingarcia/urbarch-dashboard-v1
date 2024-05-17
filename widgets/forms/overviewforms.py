@@ -40,14 +40,33 @@ class OptionsForm(FormStructure, MDBoxLayout):
 
         new_form = Form(
             Form(
-                TextInput(
-                    MDTextFieldHintText(text = "Option Name"),
-                    form_id = "option_name",
-                    role = "medium"
+                Form(
+                    TextInput(
+                        MDTextFieldHintText(text = "Option Name"),
+                        form_id = "option_name",
+                        role = "medium"
+                    ),
+                    remove,
+                    adaptive_height = True,
+                    spacing = "10dp"
                 ),
-                remove,
+                Form(
+                    CheckboxInput(
+                        label = "Linked",
+                        value = "link",
+                        size_hint_x = 0.25
+                    ),
+                    TextInput(
+                        MDTextFieldHintText(text = "Link Name"),
+                        form_id = "link_name",
+                        role = "small"
+                    ),
+                    adaptive_height = True,
+                    spacing = "5dp"
+                ),
+                orientation = "vertical",
                 adaptive_height = True,
-                spacing = "10dp"
+                spacing = "5dp"
             ),
             TableForm(form_id = "option_content"),
             orientation = "vertical",
