@@ -114,15 +114,18 @@ class ReplacementForm(SearchForm):
     def __init__(self, *args, **kwargs):
         super(ReplacementForm, self).__init__(*args, **kwargs)
 
-        self.form_id = "replacement_ids"
+        self.form_id = "replacements"
     
     def search_database(self, text):
-        return Database.search_components(text)
+        return Database.get_replacement_list(text)
 
-    def prefill(self, ids):
-        data = [Database.get_product(id) for id in ids]
-        for tag in data:
-            self.append(tag["id"], tag["name"])
+    def prefill(self, replacements):
+        replacements = [Database.get_replacement(replacement["id"], replacement["extension"]) for replacement in replacements]
+        for replacement in replacements:
+            self.append({"id": replacement["id"], "extension": replacement["extension"]}, replacement["name"])
+
+    def submit(self):
+        return self.form_id, [child.submit()[1] for child in self._container.children]
 
 class TagForm(SearchForm):
     def __init__(self, *args, **kwargs):
