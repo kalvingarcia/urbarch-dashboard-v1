@@ -203,9 +203,6 @@ class Database:
             );
         ''')
         cls._pygres("ALTER TABLE IF EXISTS tag ADD COLUMN IF NOT EXISTS index tsvector;")
-        cls._pygres(f'''
-            UPDATE tag SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["name"]])});
-        ''')
         cls._pygres("CREATE INDEX IF NOT EXISTS tag_index ON tag USING GIN(index);")
 
         cls._pygres('''
@@ -238,15 +235,16 @@ class Database:
 
         cls._complete_action()
 
-        # REGIN f'''
-        #   UPDATE {}} 
-        #   SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in []])})
-        #   WHERE id = {};
-        # '''
-
     @classmethod
     def get_metal_finishes_list(cls):
-        return []
+        try:
+            cls._pygres("SELECT * FROM finishes;")
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "name", "outdoor"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
 
     @classmethod
     def get_tag_category_list(cls):
@@ -429,7 +427,8 @@ class Database:
                                 ''' for ids in filters.values()
                             ])}
                         ),
-                    '''
+                    ''' if len(filters) != 0
+                    else ""
                 }
                 {"WITH" if search == "" and len(filters) == 0 else ""} categories AS (
                     /* Create a table with the tag name and listing id */
@@ -462,37 +461,25 @@ class Database:
             cls._pygres(f'''
                 WITH variations AS (
                     SELECT extension, subname, price, overview, (
-                        SELECT json_agg(json_build_object(
+                        SELECT COALESCE(json_agg(json_build_object(
                             'id', tag.id,
                             'name', tag.name,
                             'category_id', tag_category.name,
                             'listing_id', product_variation__tag.listing_id
-                        )) FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id
+                        )), '[]') FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id
                             INNER JOIN product_variation__tag ON product_variation__tag.tag_id = tag.id
                         WHERE product_variation__tag.listing_id = '0' AND product_variation__tag.variation_extension = extension
-                    ) AS tags, (
-                        SELECT json_agg(json_build_object(
-                            'id', product_listing.id,
-                            'extension', product_variation.extension,
-                            'name', product_listing.name,
-                            'subname', product_variation.subname,
-                            'price', product_variation.price
-                        )) FROM product_listing INNER JOIN product_variation ON product_listing.id = product_variation.listing_id
-                        WHERE (product_listing.id, product_variation.extension) IN (
-                            SELECT id, extension
-                            FROM json_populate_recordset('{{"id": TEXT, "extension": TEXT}}', overview->'replacement_ids')
-                        )
-                    ) AS replacements
+                    ) AS tags
                     FROM product_variations WHERE listing_id = '{id}' AND display = TRUE
                 )
                 SELECT id, name, description, (
-                    SELECT json_agg(json_build_object(
+                    SELECT COALESCE(json_agg(json_build_object(
                         'extension', extension,
                         'subname', subname,
                         'price', price,
                         'overview', overview,
                         'tags', tags
-                    )) FROM variations
+                    )), '[]') FROM variations
                 ) as variations
                 FROM product_listing WHERE id = '{id}';
             ''')
@@ -509,23 +496,37 @@ class Database:
         try:
             variations = data.pop("variations")
 
-            cls._pygres.insert("product_listing", data)
-            cls._pygres.regin("product_listing", columns = ["id", "name", "description"])
+            columns = ", ".join(data.keys())
+            values = tuple(data.values())
+            cls._pygres(f"INSERT INTO product_listing({columns}) VALUES {values} RETURNING id;")
+            cls._pygres.fetch[0][0]
+            cls._pygres(f'''
+                UPDATE product_listing
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
+                WHERE id = '{id}';
+            ''')
 
             for variation in variations:
                 tags = variation.pop("tags")
 
                 variation['listing_id'] = data['id']
                 variation["overview"] = json.dumps(variation["overview"])
-                cls._pygres.insert("product_variations", variation)
-                cls._pygres.regin("product_variations", columns = ["subname"])
+
+                columns = ", ".join(variation.keys())
+                values = tuple(variation.values())
+                cls._pygres(f"INSERT INTO product_variation({columns}) VALUES {values} RETURNING id;")
+                cls._pygres.fetch[0][0]
+                cls._pygres(f'''
+                    UPDATE product_variation
+                    SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["subname"]])})
+                    WHERE id = '{id}';
+                ''')
 
                 for tag in tags:
-                    cls._pygres.insert("product_variation__tag", {
-                        "listing_id": data['id'],
-                        "variation_extension": variation['extension'],
-                        "tag_id": tag
-                    })
+                    cls._pygres(f'''
+                        INSERT INTO product_variation__tag(listing_id, variation_extension, tag_id) 
+                        VALUES {(data['id'], variation['extension'], tag)};
+                    ''')
 
             cls._complete_action()
         except QueryError as error:
@@ -538,8 +539,18 @@ class Database:
         try:
             variations = data.pop("variations")
 
-            cls._pygres.update("product_listing", data, where = f"id = '{id}'")
-            cls._pygres.regin("product_listing", columns = ["id", "name", "description"])
+
+            cls._pygres(f'''
+                UPDATE product_listing
+                SET {", ".join([f"{key} = {value}" for key, value in data])}
+                WHERE id = {id} RETURNING id;
+            ''')
+            id = cls._pygres.fetch[0][0]
+            cls._pygres(f'''
+                UPDATE product_listing
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
+                WHERE id = '{id}';
+            ''')
 
             extensions = set()
             for variation in variations:
@@ -549,32 +560,44 @@ class Database:
                 variation['listing_id'] = data['id']
                 variation["overview"] = json.dumps(variation["overview"])
 
-                where = f"listing_id = '{data["id"]}' AND extension = '{variation["extension"]}'"
-                if len(cls._pygres.select("product_variations", where = where)) == 0:
-                    cls._pygres.insert("product_variations", variation)
-                else:
-                    cls._pygres.update("product_variations", variation, where = where)
-
-                cls._pygres.regin("product_variations", columns = ["subname"])
+                columns = ", ".join(variation.keys())
+                values = tuple(variation.values())
+                cls._pygres(f'''
+                    IF ('{data["id"]}', '{variation["extension"]}') IN (SELECT listing_id, extension FROM product_variation) THEN
+                        UPDATE product_variation
+                        SET {", ".join([f"{key} = {value}" for key, value in variation])}
+                        WHERE listing_id = '{data["id"]}' AND extension = '{variation["extension"]}'
+                        RETURNING id
+                    ELSE
+                        INSERT INTO product_variation({columns}) VALUES {values} RETURNING id
+                    END IF;
+                ''')
+                cls._pygres.fetch[0][0]
+                cls._pygres(f'''
+                    UPDATE product_variation
+                    SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["subname"]])})
+                    WHERE id = '{id}';
+                ''')
 
                 for tag in tags:
-                    where = f"listing_id = '{data['id']}' AND variation_extension = '{variation['extension']}' AND tag_id = '{tag}'"
-                    if len(cls._pygres.select("product_variation__tag", where = where)) == 0:
-                        cls._pygres.insert("product_variation__tag", {
-                            "listing_id": data['id'],
-                            "variation_extension": variation['extension'],
-                            "tag_id": tag
-                        })
+                    cls._pygres(f'''
+                        IF ('{data['id']}', '{variation['extension']}', '{tag}') NOT IN (SELECT * FROM product_variation__tag) THEN
+                            INSERT INTO product_variation__tag(listing_id, variation_extension, tag_id) 
+                            VALUES {(data['id'], variation['extension'], tag)};
+                        END IF;
+                    ''')
 
             # clean up if extensions get updated
             # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
             # but i like to make things hard i guess
-            for variation in cls._pygres.select("product_variations", where = f"listing_id = '{data["id"]}'"):
-                if variation["extension"] not in extensions:
-                    cls._pygres.delete("product_variations", where = f"listing_id = '{variation["listing_id"]}' AND extension = '{variation["extension"]}'")
-            for tag in cls._pygres.select("product_variation__tag", where = f"listing_id = '{data["id"]}'"):
-                if tag["variation_extension"] not in extensions:
-                    cls._pygres.delete("product_variation__tag", where = f"listing_id = '{tag["listing_id"]}' AND variation_extension = '{tag["variation_extension"]}' AND tag_id = '{tag["tag_id"]}'")
+            cls._pygres(f'''
+                DELETE FROM product_variation
+                WHERE listing_id = {data["id"]} AND extension != ANY ARRAY[{", ".join([f"'{extension}'" for extension in extensions])}];
+            ''')
+            cls._pygres(f'''
+                DELETE FROM product_variation__tag
+                WHERE listing_id = {data["id"]} AND variation_extension != ANY ARRAY[{", ".join([f"'{extension}'" for extension in extensions])}];
+            ''')
 
             cls._complete_action()
         except QueryError as error:
@@ -584,8 +607,13 @@ class Database:
 
     @classmethod
     def delete_product(cls, id):
-        cls._pygres.delete("product_listing", where = f"id = '{id}'")
-        cls._complete_action()
+        try:
+            cls._pygres(f"DELETE FROM product_listing WHERE id = '{id}';")
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
 
     # STOCK METHODS
     @classmethod
@@ -793,13 +821,13 @@ class Database:
     @classmethod
     def create_custom(cls, data):
         cls._pygres.insert("custom_items", data)
-        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "product_id"])
+        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "listing_id"])
         cls._complete_action()
 
     @classmethod
     def update_custom(cls, id, data):
         cls._pygres.update("custom_items", data, where = f"id = '{id}'")
-        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "product_id"])
+        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "listing_id"])
         cls._complete_action()
 
     @classmethod
