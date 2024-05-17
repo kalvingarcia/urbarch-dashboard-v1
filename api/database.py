@@ -56,7 +56,7 @@ class Database:
         try:
             if cls._pygres is None:
                 env = json.load(open(env_file, 'r'))
-                cls._pygres = PygreSQL(*env.values())
+                cls._pygres = Pygres(*env.values())
         except:
             raise Exception()
 
@@ -65,14 +65,14 @@ class Database:
         for table in ["finishes", "product_listing", "product_variations", "instock_listing", "instock_items", "salvage_listing", "salvage_items",
             "custom_items",
             "tag_categories", "tag", "product_variation__tag", "instock_listing__tag", "salvage_listing__tag", "custom_items__tag"]:
-            cls._pygres.drop(table, cascade = True)
+            cls._pygres(f"DROP TABLE {table} CASCADE;")
 
     @classmethod
     def initialize(cls):
         cls._pygres("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
 
         # Product Related Tables
-        cls._pygres.create('''
+        cls._pygres('''
             CREATE TABLE IF NOT EXISTS finishes(
                 id VARCHAR(5),
                 name VARCHAR(255),
@@ -81,7 +81,7 @@ class Database:
         ''')
         cls._pygres(f'''
             INSERT INTO finishes(id, name, outdoor)
-            VALUES {", ".join([
+            VALUES {", ".join([f"{value}" for value in [
                 ("PB", "Polished Brass", "YES"),
                 ("PN", "Polished Nickel", "YES"),
                 ("GP", "Green Patina", "YES"),
@@ -93,7 +93,7 @@ class Database:
                 ("STBL", "Statuary Black", "NO"),
                 ("PC", "Polished Chrome", "YES"),
                 ("BN", "Black Nickel", "YES")
-            ])};
+            ]])};
         ''')
 
         cls._pygres('''
@@ -104,15 +104,13 @@ class Database:
             );
         ''')
         cls._pygres("ALTER TABLE IF EXISTS product_listing ADD COLUMN IF NOT EXISTS index tsvector;")
-        cls._pygres(f'''
-            UPDATE product_listing SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["id", "name", "description"]])});
-        ''')
         cls._pygres("CREATE INDEX IF NOT EXISTS product_listing_index ON product_listing USING GIN(index);")
 
         cls._pygres('''
             CREATE TABLE IF NOT EXISTS product_variation(
                 extension VARCHAR(10),
                 subname VARCHAR(255),
+                featured BOOL,
                 price INT,
                 display BOOL,
                 overview JSONB,
@@ -120,9 +118,6 @@ class Database:
             );
         ''')
         cls._pygres("ALTER TABLE IF EXISTS product_variation ADD COLUMN IF NOT EXISTS index tsvector;")
-        cls._pygres(f'''
-            UPDATE product_variation SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["subname"]])});
-        ''')
         cls._pygres("CREATE INDEX IF NOT EXISTS product_variation_index ON product_variation USING GIN(index);")
 
         cls._pygres('''
@@ -151,9 +146,6 @@ class Database:
             );
         ''')
         cls._pygres("ALTER TABLE IF EXISTS salvage_listing ADD COLUMN IF NOT EXISTS index tsvector;")
-        cls._pygres(f'''
-            UPDATE salvage_listing SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["id", "name", "description"]])});
-        ''')
         cls._pygres("CREATE INDEX IF NOT EXISTS salvage_listing_index ON salvage_listing USING GIN(index);")
 
         cls._pygres('''
@@ -179,9 +171,6 @@ class Database:
             );
         ''')
         cls._pygres("ALTER TABLE IF EXISTS custom_item ADD COLUMN IF NOT EXISTS index tsvector;")
-        cls._pygres(f'''
-            UPDATE custom_item SET index = to_tsvector('english', {" || ' ' || ".join([f"coalesce({column}, '')" for column in ["name", "description", "customer", "product_id"]])});
-        ''')
         cls._pygres("CREATE INDEX IF NOT EXISTS custom_item_index ON custom_item USING GIN(index);")
 
         # Tag Related Tables
@@ -194,7 +183,7 @@ class Database:
         ''')
         cls._pygres(f'''
             INSERT INTO tag_category(name, description)
-            VALUES {", ".join([
+            VALUES {", ".join([f"{value}" for value in [
                 ("Class", "Whether the item is a(n) Lighting, Bathroom, Washstands, Furnishing, Mirrors, Cabinets, Display, Hardware, Tile"),
                 ("Category", "The order of the classification, such as sconce, hanging, flushmount, etc."),
                 ("Style", "The artistic period that the item is from."),
@@ -203,7 +192,7 @@ class Database:
                 ("Material", "The type of materials used to create the item, such as alabaster, marble, aluminum, brass, etc."),
                 ("Distinction", "Specifically for lighting used to distinguish exterior and interior."),
                 ("Environmental", "Specifies any environmental conditions the item can be used in, such as waterproof.")
-            ])};
+            ]])};
         ''')
 
         cls._pygres('''
