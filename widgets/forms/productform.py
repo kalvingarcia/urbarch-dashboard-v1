@@ -5,7 +5,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextFieldHelperText, MDTextFieldHintText, MDTextFieldLeadingIcon
 from kivymd.uix.button import MDIconButton
 from api.database import Database
-from widgets.forms.form import FormStructure, Form, TextInput, CheckboxInput, CheckGroup, SwitchInput, TabForm, NumberInput
+from widgets.forms.form import FormStructure, Form, TextInput, CheckboxInput, CheckGroup, SwitchInput, TabForm, NumberInput, DropdownInput
 from widgets.forms.overviewforms import ReplacementForm, TagForm, FinishesForm, OptionsForm
 
 class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
@@ -56,7 +56,6 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
                 TagForm(),
                 MDLabel(text = "Finishes", adaptive_size = True),
                 FinishesForm(),
-                # MDLabel(text = "Options"),
                 OptionsForm(),
                 orientation = "vertical",
                 size_hint_x = 0.5,
@@ -95,6 +94,18 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
                     CheckboxInput(label = "None", group = f"UL_{self.default_name}", active = True,  adaptive_height = True),
                     form_id = "ul_info",
                     adaptive_height = True
+                ),
+                MDLabel(text = "Buld Type", adaptive_size = True),
+                DropdownInput(
+                    data = [
+                        {"value": {}, "text": "Bulb 1"},
+                        {"value": {}, "text": "Bulb 2"},
+                        {"value": {}, "text": "Bulb 3"},
+                        {"value": {}, "text": "Bulb 4"},
+                        {"value": {}, "text": "Proprietary"},
+                        {"value": {}, "text": "None"},
+                    ],
+                    default_entry = -1
                 ),
                 MDLabel(text = "Replacements", adaptive_size = True),
                 ReplacementForm(),
