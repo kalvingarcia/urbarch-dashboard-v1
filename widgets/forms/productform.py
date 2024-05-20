@@ -65,22 +65,72 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
             Form(
                 MDLabel(text = "Specifications", adaptive_size = True),
                 Form(
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Height"),
-                        form_id = "height"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Variation Height"),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "inches", "text": "in"},
+                                {"value": "feet", "text": "ft"},
+                                {"value": "milimeters", "text": "mm"},
+                                {"value": "centimeters", "text": "cm"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "height",
+                        adaptive_height = True
                     ),
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Width"),
-                        form_id = "width"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Variation Width"),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "inches", "text": "in"},
+                                {"value": "feet", "text": "ft"},
+                                {"value": "milimeters", "text": "mm"},
+                                {"value": "centimeters", "text": "cm"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "width",
+                        adaptive_height = True
                     ),
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Depth"),
-                        MDTextFieldHelperText(text = "For wallmounted products this would be the projection."),
-                        form_id = "depth"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Variation Depth"),
+                            MDTextFieldHelperText(text = "For wallmounted products this would be the projection."),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "inches", "text": "in"},
+                                {"value": "feet", "text": "ft"},
+                                {"value": "milimeters", "text": "mm"},
+                                {"value": "centimeters", "text": "cm"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "depth",
+                        adaptive_height = True
                     ),
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Weight"),
-                        form_id = "weight"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Variation Weight"),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "pounds", "text": "lb"},
+                                {"value": "kilograms", "text": "kg"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "weight",
+                        adaptive_height = True
                     ),
                     form_id = "specifications",
                     orientation = "vertical",
@@ -92,20 +142,65 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
                     CheckboxInput(label = "Damp Environments", value = "Damp", group = f"UL_{self.default_name}", adaptive_height = True),
                     CheckboxInput(label = "Wet Environments", value = "Wet", group = f"UL_{self.default_name}",  adaptive_height = True),
                     CheckboxInput(label = "None", group = f"UL_{self.default_name}", active = True,  adaptive_height = True),
-                    form_id = "ul_info",
+                    form_id = "ul",
                     adaptive_height = True
                 ),
-                MDLabel(text = "Buld Type", adaptive_size = True),
-                DropdownInput(
-                    data = [
-                        {"value": {}, "text": "Bulb 1"},
-                        {"value": {}, "text": "Bulb 2"},
-                        {"value": {}, "text": "Bulb 3"},
-                        {"value": {}, "text": "Bulb 4"},
-                        {"value": {}, "text": "Proprietary"},
-                        {"value": {}, "text": "None"},
-                    ],
-                    default_entry = -1
+                MDLabel(text = "Bulb Info", adaptive_size = True),
+                Form(
+                    Form(
+                        DropdownInput(
+                            data = [
+                                {"value": "Standard", "text": "Standard"},
+                                {"value": "Torpedo", "text": "Torpedo"},
+                                {"value": "Candle", "text": "Candle"},
+                                {"value": "Diamond", "text": "Diamond"},
+                                {"value": "Globe", "text": "Globe"},
+                                {"value": "Reflector", "text": "Reflector"},
+                                {"value": "Tubular", "text": "Tubular"},
+                                {"value": "Vintage", "text": "Vintage"},
+                                {"value": "Proprietary", "text": "Proprietary"}
+                            ],
+                            form_id = "name"
+                        ),
+                        TextInput(
+                            MDTextFieldHintText(text = "Bulb Shape"),
+                            MDTextFieldHelperText(text = "The shape colloquial name and code. (Example: Standard (A19))"),
+                            form_id = "code"
+                        ),
+                        form_id = "shape",
+                        adaptive_height = True
+                    ),
+                    Form(
+                        DropdownInput(
+                            data = [
+                                {"value": "Medium", "text": "Medium Base"},
+                                {"value": "Candelabra", "text": "Candelabra Base"},
+                                {"value": "Pin", "text": "Pin Base"},
+                                {"value": "Builtin", "text": "Builtin"}
+                            ],
+                            form_id = "name"
+                        ),
+                        TextInput(
+                            MDTextFieldHintText(text = "Bulb Socket"),
+                            MDTextFieldHelperText(text = "The socket type colloquial name and code. (Example: Medium (E26))"),
+                            form_id = "code"
+                        ),
+                        form_id = "socket",
+                        adaptive_height = True
+                    ),
+                    NumberInput(
+                        MDTextFieldHintText(text = "Bulb Quantity"),
+                        MDTextFieldHelperText(text = "The amount of bulbs the fixture needs."),
+                        form_id = "quantity"
+                    ),
+                    TextInput(
+                        MDTextFieldHintText(text = "Bulb Specifications"),
+                        MDTextFieldHelperText(text = "The wattage, lumens, CRI, and life of the bulb."),
+                        form_id = "specifications"
+                    ),
+                    form_id = "bulb",
+                    orientation = "vertical",
+                    adaptive_height = True
                 ),
                 MDLabel(text = "Replacements", adaptive_size = True),
                 ReplacementForm(),
@@ -139,7 +234,7 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
         form_data = self.__form.submit()[1]
 
         overview = {}
-        for key in ["finishes", "options", "bulb_type", "replacement_ids", "ul_info", "specifications", "notes"]:
+        for key in ["finishes", "options", "bulb", "replacements", "ul", "specifications", "notes"]:
             overview[key] = form_data.pop(key)
         form_data["overview"] = overview
 
