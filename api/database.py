@@ -267,7 +267,7 @@ class Database:
                         WITH search_filtered AS (
                             SELECT DISTINCT product_variation.listing_id AS listing_id, product_variation.extension as variation_extension
                             FROM product_listing INNER JOIN product_variation ON product_variation.listing_id = product_listing.id
-                            WHERE product_listing.index @@ to_tsquery({search + ':*'}) OR product_variation.index @@ to_tsquery({search + ':*'})
+                            WHERE product_listing.index @@ to_tsquery('{search + ':*'}') OR product_variation.index @@ to_tsquery('{search + ':*'}')
                         ),
                     ''' if search != ""
                     else ""
@@ -320,8 +320,8 @@ class Database:
                 {
                     f'''
                         WITH search_filtered AS (
-                            SELECT DISTINCT id FROM tag WHERE index @@ to_tsquery({search + ':*'})
-                        ),
+                            SELECT DISTINCT id FROM tag WHERE index @@ to_tsquery('{search + ':*'}')
+                        )
                     ''' if search != ""
                     else ""
                 }
@@ -411,7 +411,7 @@ class Database:
                         WITH search_filtered AS (
                             SELECT DISTINCT product_variation.listing_id AS id, product_variation.extension AS extension
                             FROM product_listing INNER JOIN product_variation ON product_variation.listing_id = product_listing.id
-                            WHERE product_listing.index @@ to_tsquery({search + ':*'}) OR product_variation.index @@ to_tsquery({search + ':*'})
+                            WHERE product_listing.index @@ to_tsquery('{search + ':*'}') OR product_variation.index @@ to_tsquery('{search + ':*'}')
                         ),
                     ''' if search != "" 
                     else ""
@@ -439,16 +439,17 @@ class Database:
                 ), results AS (
                     SELECT id, extension, name, subname, category, price, featured
                     FROM product_listing INNER JOIN product_variation ON product_listing.id = product_variation.listing_id
-                        INNER JOIN categories USING(id)
+                        JOIN categories USING(id)
                         {"INNER JOIN search_filtered USING(id, extension)" if search != "" else ""}
                         {"INNER JOIN tag_filtered USING(id, extension)" if len(filters) != 0 else ""}
-                    WHERE display = TRUE
                 )
                 SELECT DISTINCT id, name, category
                 FROM results;
             ''')
             results = cls._pygres.fetch()
-            return [{key: value for key, value in zip(["id", "name", "category"], result)} for result in results]
+            cls._pygres("SELECT id, name, description FROM product_listing;")
+            all = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "name", "category"], result)} for result in all]
         except QueryError as error:
             print("Error while attempting to search database: " + str(error))
             cls._error()
@@ -470,7 +471,7 @@ class Database:
                             INNER JOIN product_variation__tag ON product_variation__tag.tag_id = tag.id
                         WHERE product_variation__tag.listing_id = '0' AND product_variation__tag.variation_extension = extension
                     ) AS tags
-                    FROM product_variations WHERE listing_id = '{id}' AND display = TRUE
+                    FROM product_variation WHERE listing_id = '{id}'
                 )
                 SELECT id, name, description, (
                     SELECT COALESCE(json_agg(json_build_object(
@@ -499,7 +500,7 @@ class Database:
             columns = ", ".join(data.keys())
             values = tuple(data.values())
             cls._pygres(f"INSERT INTO product_listing({columns}) VALUES {values} RETURNING id;")
-            cls._pygres.fetch[0][0]
+            cls._pygres.fetch()[0][0]
             cls._pygres(f'''
                 UPDATE product_listing
                 SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
@@ -514,12 +515,12 @@ class Database:
 
                 columns = ", ".join(variation.keys())
                 values = tuple(variation.values())
-                cls._pygres(f"INSERT INTO product_variation({columns}) VALUES {values} RETURNING id;")
-                cls._pygres.fetch[0][0]
+                cls._pygres(f"INSERT INTO product_variation({columns}) VALUES {values} RETURNING extension;")
+                extension = cls._pygres.fetch()[0][0]
                 cls._pygres(f'''
                     UPDATE product_variation
                     SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["subname"]])})
-                    WHERE id = '{id}';
+                    WHERE listing_id = '{id}' AND extension = '{extension}';
                 ''')
 
                 for tag in tags:
@@ -545,7 +546,7 @@ class Database:
                 SET {", ".join([f"{key} = {value}" for key, value in data])}
                 WHERE id = {id} RETURNING id;
             ''')
-            id = cls._pygres.fetch[0][0]
+            id = cls._pygres.fetch()[0][0]
             cls._pygres(f'''
                 UPDATE product_listing
                 SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
@@ -572,11 +573,11 @@ class Database:
                         INSERT INTO product_variation({columns}) VALUES {values} RETURNING id
                     END IF;
                 ''')
-                cls._pygres.fetch[0][0]
+                extension =  cls._pygres.fetch()[0][0]
                 cls._pygres(f'''
                     UPDATE product_variation
                     SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["subname"]])})
-                    WHERE id = '{id}';
+                    WHERE listing_id = '{id}' AND extension = '{extension}';
                 ''')
 
                 for tag in tags:
