@@ -423,7 +423,7 @@ class SearchResults(MDDropdownMenu):
 
     def fill(self, data):
         data = [{
-            "text": entry["name"],
+            "text": f"{entry["name"]} [{entry["subname"]}]" if "subname" in entry.keys() else entry["name"],
             "on_release": lambda id = entry["id"], text = entry["name"]: self.__on_press(id, text)
         } for entry in data]
         if self.__create_tag is not None:
@@ -481,11 +481,6 @@ class SearchForm(FormStructure, MDBoxLayout):
 
     def search(self, *args):
         self.results.fill(self.search_database(self.search_box.text))
-
-        def append(*args):
-            for chip in search_results.submit():
-                self._container.add_widget(chip)
-            dialog.dismiss()
 
     def default(self):
         self._container.clear_widgets()
