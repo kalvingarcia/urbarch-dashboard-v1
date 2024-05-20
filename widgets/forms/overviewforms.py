@@ -5,6 +5,7 @@ from kivymd.uix.button import MDButton, MDIconButton
 from kivymd.uix.textfield import MDTextFieldHintText, MDTextFieldHelperText
 from kivymd.uix.dialog import MDDialog, MDDialogButtonContainer, MDDialogContentContainer, MDDialogHeadlineText
 from api.database import Database
+from widgets.forms.createtagform import CreateTagForm
 from .form import FormStructure, Form, TextInput, NumberInput, CheckboxInput, SearchForm, TableForm, DropdownInput, TableEntry
 
 class OptionsForm(FormStructure, MDBoxLayout):
@@ -122,7 +123,7 @@ class ReplacementForm(SearchForm):
     def prefill(self, replacements):
         replacements = [Database.get_replacement(replacement["id"], replacement["extension"]) for replacement in replacements]
         for replacement in replacements:
-            self.append({"id": replacement["id"], "extension": replacement["extension"]}, replacement["name"])
+            self.append({"id": replacement["id"], "extension": replacement["extension"]}, f"{replacement["name"]} [{replacement["subname"]}]")
 
     def submit(self):
         return self.form_id, [child.submit()[1] for child in self._container.children]
@@ -134,46 +135,10 @@ class TagForm(SearchForm):
         self.form_id = "tags"
 
     def search_database(self, text):
-        return Database.search_tags(text)
+        return Database.get_tag_list(text)
 
     def create_tag(self):
-        categories = [{
-            "value": category["id"],
-            "text": category["name"]
-        } for category in Database.get_tag_categories()]
-
-        tag_form = Form(
-            TextInput(
-                MDTextFieldHintText(text = "Tag Name"),
-                MDTextFieldHelperText(text = "This is the name displayed in tag lists."),
-                form_id = "name"),
-            DropdownInput(form_id = "category_id", data = categories),
-            orientation = "vertical",
-            adaptive_height = True
-        )
-
-        complete = MDIconButton(icon = "check", style = "filled")
-        cancel = MDIconButton(icon = "window-close")
-
-        dialog = MDDialog(
-            MDDialogHeadlineText(text = "Tag Information"),
-            MDDialogContentContainer(
-                tag_form
-            ),
-            MDDialogButtonContainer(
-                MDLabel(text = " "),
-                cancel,
-                complete
-            )
-        )
-
-        def send_tag(data):
-            Database.create_tag(data)
-
-        cancel.bind(on_press = lambda *args: self.dismiss())
-        complete.bind(on_press = lambda *args: send_tag(tag_form.submit()[1]))
-
-        dialog.open()
+        CreateTagForm().open()
 
     def prefill(self, ids):
         data = [Database.get_tag(id) for id in ids]
