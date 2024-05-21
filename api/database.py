@@ -403,6 +403,57 @@ class Database:
 
     # PRODUCT METHODS
     @classmethod
+    def get_replacement_list(cls, search: str = ""):
+        try:
+            cls._pygres(f'''
+                {
+                    f'''
+                        WITH search_filtered AS (
+                            SELECT DISTINCT product_variation.listing_id AS id, product_variation.extension AS extension
+                            FROM product_listing INNER JOIN product_variation ON product_variation.listing_id = product_listing.id
+                            WHERE product_listing.index @@ to_tsquery('{search + ':*'}') OR product_variation.index @@ to_tsquery('{search + ':*'}')
+                        )
+                    ''' if search != "" 
+                    else ""
+                }
+                SELECT DISTINCT json_build_object(
+                    'id', product_variation.listing_id,
+                    'extension', product_variation.extension
+                ) AS id, product_listing.name AS name, product_variation.subname AS subname
+                FROM product_listing INNER JOIN product_variation ON product_variation.listing_id = product_listing.id
+                    INNER JOIN product_variation__tag ON product_variation__tag.listing_id = product_variation.listing_id
+                        AND product_variation__tag.variation_extension = product_variation.extension
+                    INNER JOIN tag ON tag.id = product_variation__tag.tag_id
+                    {"INNER JOIN search_filtered USING(id, extension)" if search != "" else ""}
+                WHERE tag.name = 'Replacement';
+            ''')
+
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "name", "subname"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
+
+    @classmethod
+    def get_replacement(cls, id, extension):
+        try:
+            cls._pygres(f'''
+                SELECT json_build_object(
+                    'id', product_variation.listing_id, 
+                    'extension', product_variation.extension
+                ) AS id, product_listing.name AS name
+                FROM product_listing INNER JOIN product_variation ON product_listing.id = product_variation.listing_id
+                WHERE product_listing.id = '{id}' AND product_variation.extension = '{extension}';
+            ''')
+            result = cls._pygres.fetch()[0]
+            return {key: value for key, value in zip(["id", "name"], result)}
+        except QueryError as error:
+            print("Error while attempting to search database: " + str(error))
+            cls._error()
+            return []
+
+    @classmethod
     def get_product_list(cls, search: str = "", filters: dict = {}):
         try:
             cls._pygres(f'''
