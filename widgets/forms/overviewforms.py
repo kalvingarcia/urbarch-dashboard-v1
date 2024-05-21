@@ -123,7 +123,7 @@ class ReplacementForm(SearchForm):
     def prefill(self, replacements):
         replacements = [Database.get_replacement(replacement["id"], replacement["extension"]) for replacement in replacements]
         for replacement in replacements:
-            self.append({"id": replacement["id"], "extension": replacement["extension"]}, f"{replacement["name"]} [{replacement["subname"]}]")
+            self.append({"id": replacement["id"]["id"], "extension": replacement["id"]["extension"]}, replacement["name"])
 
     def submit(self):
         return self.form_id, [child.submit()[1] for child in self._container.children]
@@ -140,8 +140,7 @@ class TagForm(SearchForm):
     def create_tag(self):
         CreateTagForm().open()
 
-    def prefill(self, ids):
-        data = [Database.get_tag(id) for id in ids]
+    def prefill(self, data):
         for tag in data:
             self.append(tag["id"], tag["name"])
 
