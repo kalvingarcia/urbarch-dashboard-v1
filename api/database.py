@@ -550,7 +550,7 @@ class Database:
             columns = ", ".join(data.keys())
             values = tuple(data.values())
             cls._pygres(f"INSERT INTO product_listing({columns}) VALUES {values} RETURNING id;")
-            cls._pygres.fetch()[0][0]
+            id = cls._pygres.fetch()[0][0]
             cls._pygres(f'''
                 UPDATE product_listing
                 SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
@@ -610,9 +610,6 @@ class Database:
                 variation['listing_id'] = data['id']
                 variation["overview"] = json.dumps(variation["overview"])
 
-                columns = ", ".join(variation.keys())
-                values = tuple(variation.values())
-
                 cls._pygres(f'''
                     SELECT listing_id, extension FROM product_variation 
                     WHERE listing_id = '{data["id"]}' AND extension = '{variation["extension"]}';
@@ -625,6 +622,8 @@ class Database:
                         RETURNING extension;
                     ''')
                 else:
+                    columns = ", ".join(variation.keys())
+                    values = tuple(variation.values())
                     cls._pygres(f"INSERT INTO product_variation({columns}) VALUES {values} RETURNING extension;")
                 extension =  cls._pygres.fetch()[0][0]
 
@@ -681,45 +680,76 @@ class Database:
     # STOCK METHODS
     @classmethod
     def get_stock_list(cls):
-        return cls._pygres.select("instock_listing")
+        try:
+            cls._pygres(f"SELECT listing_id, variation_extension, sale FROM instock_listing;")
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "extension", "sale"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to get stock list: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def get_stock(cls, id):
-        result = cls._pygres.select("instock_listing", where = f"id = '{id}'")[0]
-        result["items"] = cls._pygres.select("instock_items", where = f"listing_id = '{id}'")
-        for item in result["items"]:
-            item["tags"] = [stock_tag["tag_id"] for stock_tag in cls._pygres.select(
-                "instock_listing__tag",
-                columns = ["tag_id"],
-                distinct = True,
-                where = f"listing_id = '{id}' AND item_serial = '{item["serial"]}'"
-            )]
-        return result
+        try:
+            cls._pygres(f'''
+                WITH items AS (
+                    SELECT serial, display, overview, listing_id, (
+                        SELECT COALESCE(json_agg(json_build_object(
+                            'id', tag.id,
+                            'name', tag.name,
+                            'category_id', tag_category.id
+                        )), '[]') FROM tag INNER JOIN instock_item__tag ON instock_item__tag.tag_id = tag.id
+                        WHERE instock_item__tag.listing_id = '{id}' AND instock_item__tag.item_serial = serial
+                    ) AS tags
+                    FROM instock_item WHERE listing_id = '{id}'
+                )
+                SELECT id, sale, price, listing_id, variation_extension, (
+                    SELECT COALESCE(json_agg(json_build_object(
+                        'serial',items.serial,
+                        'display', items.display,
+                        'overview', items.overview,
+                        'listing_id', items.listing_id
+                        'tags', items.tags
+                    )), '[]') FROM items
+                ) AS items
+                FROM instock_listing WHERE id = '{id}';
+            ''')
+            result = cls._pygres.fetch()
+            return {key: value for key, value in zip(["id", "sale", "price", "listing_id", "variation_extension", "items"], result)}
+        except QueryError as error:
+            print("Error while attempting to get stock listing: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def create_stock(cls, data):
         try:
             items = data.pop("items")
 
-            cls._pygres.insert("instock_listing", data)
+            columns = ", ".join(data.keys())
+            values = tuple(data.values())
+            cls._pygres(f"INSERT INTO instock_listing({columns}) VALUES {values};")
 
             for item in items:
                 tags = item.pop("tags")
 
                 item['listing_id'] = data['id']
                 item["overview"] = json.dumps(item["overview"])
-                cls._pygres.insert("instock_items", item)
+
+                columns = ', '.join(item.keys())
+                values = tuple(item.values())
+                cls._pygres(f"INSERT INTO instock_item({columns}) VALUES {values};")
 
                 for tag in tags:
-                    cls._pygres.insert("instock_listing__tag", {
-                        "listing_id": data['id'],
-                        "item_serial": item['serial'],
-                        "tag_id": tag
-                    })
+                    cls._pygres(f'''
+                        INSERT INTO instock_item__tag(listing_id, item_serial, tag_id) 
+                        {(data['id'], item['serial'], tag)};
+                    ''')
 
             cls._complete_action()
         except QueryError as error:
-            print("Error while attempting to create product: ", error)
+            print("Error while attempting to create instock listing: ", error)
             cls._error()
             return error
 
@@ -728,7 +758,11 @@ class Database:
         try:
             items = data.pop("items")
 
-            cls._pygres.update("instock_listing", data, where = f"id = '{id}'")
+            cls._pygres(f'''
+                UPDATE instock_listing
+                SET {", ".join([f"{key} = '{value}'" for key, value in data.items()])}
+                WHERE id = '{id}';
+            ''')
 
             serials = set()
             for item in items:
@@ -738,41 +772,64 @@ class Database:
                 item['listing_id'] = data['id']
                 item["overview"] = json.dumps(item["overview"])
 
-                where = f"listing_id = '{data["id"]}' AND serial = '{item["serial"]}'"
-                if len(cls._pygres.select("instock_items", where = where)) == 0:
-                    cls._pygres.insert("instock_items", item)
+                cls._pygres(f'''
+                    SELECT * FROM instock_items
+                    WHERE listing_id = '{data["id"]}' AND serial = '{item["serial"]};
+                ''')
+                if len(cls._pygres.fetch()) > 0:
+                    cls._pygres(f'''
+                        UPDATE instock_item
+                        SET {", ".join([f"{key} = {value}" for key, value in item.items()])}
+                        WHERE listing_id = '{item['listing_id']}' AND serial = '{item['serial']}';
+                    ''')
                 else:
-                    cls._pygres.update("instock_items", item, where = where)
+                    columns = ", ".join(item.keys())
+                    values = tuple(item.values())
+                    cls._pygres(f"INSERT INTO instock_item({columns}) VALUES {values};")
 
                 for tag in tags:
-                    where = f"listing_id = '{data['id']}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}'"
-                    if len(cls._pygres.select("instock_listing__tag", where = where)) == 0:
-                        cls._pygres.insert("instock_listing__tag", {
-                            "listing_id": data['id'],
-                            "item_serial": item['serial'],
-                            "tag_id": tag
-                        })
+                    cls._pygres(f'''
+                        SELECT * FROM instock_item__tag
+                        WHERE listing_id = '{data['id']}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}';
+                    ''')
+                    if len(cls._pygres.fetch()) == 0:
+                        cls._pygres(f'''
+                            INSERT INTO instock_item__tag(listing_id, item_serial, tag_id) 
+                            VALUES {(data['id'], item['serial'], tag)};
+                        ''')
+                cls._pygres(f'''
+                    DELETE FROM instock_item__tag
+                    WHERE listing_id = '{data["id"]}' AND item_serial = '{item["serial"]}'
+                        AND tag_id NOT IN ({", ".join([f"'{tag}'" for tag in tags])});
+                ''')
 
             # clean up if extensions get updated
             # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
             # but i like to make things hard i guess
-            for item in cls._pygres.select("instock_items", where = f"listing_id = '{data["id"]}'"):
-                if item["serial"] not in serials:
-                    cls._pygres.delete("instock_items", where = f"listing_id = '{item["listing_id"]}' AND extension = '{item["extension"]}'")
-            for tag in cls._pygres.select("instock_listing__tag", where = f"listing_id = '{data["id"]}'"):
-                if tag["item_serial"] not in serials:
-                    cls._pygres.delete("instock_listing__tag", where = f"listing_id = '{tag["listing_id"]}' AND item_serial = '{tag["item_serial"]}' AND tag_id = '{tag["tag_id"]}'")
+            cls._pygres(f'''
+                DELETE FROM instock_item
+                WHERE listing_id = '{data["id"]}' AND serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
+            ''')
+            cls._pygres(f'''
+                DELETE FROM instock_item__tag
+                WHERE listing_id = '{data["id"]}' AND item_serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
+            ''')
 
             cls._complete_action()
         except QueryError as error:
-            print("Error while attempting to update product: ", error)
+            print("Error while attempting to update instock listings: ", error)
             cls._error()
             return error
 
     @classmethod
     def delete_stock(cls, id):
-        cls._pygres.delete("instock_listing", where = f"id = '{id}'")
-        cls._complete_action()
+        try:   
+            cls._pygres(f"DELETE FROM instock_listing WHERE id = '{id}';")
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to delete instock listings: ", error)
+            cls._error()
+            return error
 
     # SALVAGE METHODS
     @classmethod
