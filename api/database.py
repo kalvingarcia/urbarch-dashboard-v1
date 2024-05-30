@@ -685,7 +685,7 @@ class Database:
         try:
             cls._pygres(f'''
                 WITH items AS (
-                    SELECT serial, display, overview, listing_id, (
+                    SELECT serial, display, overview, (
                         SELECT COALESCE(json_agg(json_build_object(
                             'id', tag.id,
                             'name', tag.name,
@@ -700,7 +700,6 @@ class Database:
                         'serial',items.serial,
                         'display', items.display,
                         'overview', items.overview,
-                        'listing_id', items.listing_id
                         'tags', items.tags
                     )), '[]') FROM items
                 ) AS items
