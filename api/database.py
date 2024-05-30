@@ -825,42 +825,78 @@ class Database:
     # SALVAGE METHODS
     @classmethod
     def get_salvage_list(cls):
-        return cls._pygres.select("salvage_listing")
+        try:
+            cls._pygres(f"SELECT id, name, description FROM salvage_listing;")
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "extension", "sale"], result)} for result in results]
+        except QueryError as error:
+            print("Error while attempting to get stock list: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def get_salvage(cls, id):
-        result = cls._pygres.select("salvage_listing", where = f"id = '{id}'")[0]
-        result["items"] = cls._pygres.select("salvage_items", where = f"listing_id = '{id}'")
-        for item in result["items"]:
-            item["tags"] = [stock_tag["tag_id"] for stock_tag in cls._pygres.select(
-                "salvage_listing__tag",
-                columns = ["tag_id"],
-                distinct = True,
-                where = f"listing_id = '{id}' AND item_serial = '{item["serial"]}'"
-            )]
-        return result
+        try:
+            cls._pygres(f'''
+                WITH items AS (
+                    SELECT serial, price, display, overview, (
+                        SELECT COALESCE(json_agg(json_build_object(
+                            'id', tag.id,
+                            'name', tag.name,
+                            'category_id', tag_category.id
+                        )), '[]') FROM tag INNER JOIN salvage_item__tag ON salvage_item__tag.tag_id = tag.id
+                        WHERE salvage_item__tag.listing_id = '{id}' AND salvage_item__tag.item_serial = serial
+                    ) AS tags
+                    FROM salvage_item WHERE listing_id = '{id}'
+                )
+                SELECT id, name, description, (
+                    SELECT COALESCE(json_agg(json_build_object(
+                        'serial',items.serial,
+                        'price', items.price
+                        'display', items.display,
+                        'overview', items.overview,
+                        'tags', items.tags
+                    )), '[]') FROM items
+                ) AS items
+                FROM salvage_listing WHERE id = '{id}';
+            ''')
+            result = cls._pygres.fetch()
+            return {key: value for key, value in zip(["id", "sale", "price", "listing_id", "variation_extension", "items"], result)}
+        except QueryError as error:
+            print("Error while attempting to get stock listing: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def create_salvage(cls, data):
         try:
             items = data.pop("items")
 
-            cls._pygres.insert("salvage_listing", data)
-            cls._pygres.regin("salvage_listing", columns = ["id", "name", "description"])
+            columns = ", ".join(data.keys())
+            values = tuple(data.values())
+            cls._pygres(f"INSERT INTO salvage_listing({columns}) VALUES {values} RETURNING id;")
+            id = cls._pygres.fetch()[0][0]
+            cls._pygres(f'''
+                UPDATE salvage_listing
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
+                WHERE id = '{id}';
+            ''')
 
             for item in items:
                 tags = item.pop("tags")
 
                 item['listing_id'] = data['id']
                 item["overview"] = json.dumps(item["overview"])
-                cls._pygres.insert("salvage_items", item)
+                
+                columns = ", ".join(variation.keys())
+                values = tuple(variation.values())
+                cls._pygres(f"INSERT INTO salvage_item({columns}) VALUES {values};")
 
                 for tag in tags:
-                    cls._pygres.insert("salvage_listing__tag", {
-                        "listing_id": data['id'],
-                        "item_serial": item['serial'],
-                        "tag_id": tag
-                    })
+                    cls._pygres(f'''
+                        INSERT INTO salvage_item__tag(listing_id, item_serial, tag_id) 
+                        {(data['id'], item['serial'], tag)};
+                    ''')
 
             cls._complete_action()
         except QueryError as error:
@@ -873,8 +909,17 @@ class Database:
         try:
             items = data.pop("item")
 
-            cls._pygres.update("salvage_listing", data, where = f"id = '{id}'")
-            cls._pygres.regin("salvage_listing", columns = ["id", "name", "description"])
+            cls._pygres(f'''
+                UPDATE salvage_listing
+                SET {", ".join([f"{key} = '{value}'" for key, value in data.items()])}
+                WHERE id = '{id}' RETURNING id;
+            ''')
+            id = cls._pygres.fetch()[0][0]
+            cls._pygres(f'''
+                UPDATE salvage_listing
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
+                WHERE id = '{id}';
+            ''')
 
             serials = set()
             for item in items:
@@ -884,30 +929,48 @@ class Database:
                 item['listing_id'] = data['id']
                 item["overview"] = json.dumps(item["overview"])
 
-                where = f"listing_id = '{data["id"]}' AND serial = '{item["serial"]}'"
-                if len(cls._pygres.select("salvage_items", where = where)) == 0:
-                    cls._pygres.insert("salvage_items", item)
+                cls._pygres(f'''
+                    SELECT * FROM salvage_item
+                    WHERE listing_id = '{id}' AND serial = '{item["serial"]};
+                ''')
+                if len(cls._pygres.fetch()) > 0:
+                    cls._pygres(f'''
+                        UPDATE salvage_item
+                        SET {", ".join([f"{key} = {value}" for key, value in item.items()])}
+                        WHERE listing_id = '{item['listing_id']}' AND serial = '{item['serial']}';
+                    ''')
                 else:
-                    cls._pygres.update("salvage_items", item, where = where)
+                    columns = ", ".join(item.keys())
+                    values = tuple(item.values())
+                    cls._pygres(f"INSERT INTO salvage_item({columns}) VALUES {values};")
 
                 for tag in tags:
-                    where = f"listing_id = '{data['id']}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}'"
-                    if len(cls._pygres.select("salvage_items__tag", where = where)) == 0:
-                        cls._pygres.insert("salvage_items__tag", {
-                            "listing_id": data['id'],
-                            "item_serial": item['serial'],
-                            "tag_id": tag
-                        })
+                    cls._pygres(f'''
+                        SELECT * FROM salvage_item__tag
+                        WHERE listing_id = '{id}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}';
+                    ''')
+                    if len(cls._pygres.fetch()) == 0:
+                        cls._pygres(f'''
+                            INSERT INTO salvage_item__tag(listing_id, item_serial, tag_id) 
+                            VALUES {(id, item['serial'], tag)};
+                        ''')
+                cls._pygres(f'''
+                    DELETE FROM salvage_item__tag
+                    WHERE listing_id = '{id}' AND item_serial = '{item["serial"]}'
+                        AND tag_id NOT IN ({", ".join([f"'{tag}'" for tag in tags])});
+                ''')
 
             # clean up if extensions get updated
             # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
             # but i like to make things hard i guess
-            for item in cls._pygres.select("salvage_items", where = f"listing_id = '{data["id"]}'"):
-                if item["serial"] not in serials:
-                    cls._pygres.delete("salvage_items", where = f"listing_id = '{item["listing_id"]}' AND extension = '{item["extension"]}'")
-            for tag in cls._pygres.select("salvage_items__tag", where = f"listing_id = '{data["id"]}'"):
-                if tag["item_serial"] not in serials:
-                    cls._pygres.delete("salvage_items__tag", where = f"listing_id = '{tag["listing_id"]}' AND item_serial = '{tag["item_serial"]}' AND tag_id = '{tag["tag_id"]}'")
+            cls._pygres(f'''
+                DELETE FROM salvage_item
+                WHERE listing_id = '{data["id"]}' AND serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
+            ''')
+            cls._pygres(f'''
+                DELETE FROM salvage_item__tag
+                WHERE listing_id = '{data["id"]}' AND variation_extension != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
+            ''')
 
             cls._complete_action()
         except QueryError as error:
@@ -917,8 +980,13 @@ class Database:
 
     @classmethod
     def delete_salvage(cls, id):
-        cls._pygres.delete("salvage_listing", where = f"id = '{id}'")
-        cls._complete_action()
+        try:
+            cls._pygres(f"DELETE FROM salvage_listing WHERE id = {id};")
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
 
     # CUSTOM METHODS
     @classmethod
