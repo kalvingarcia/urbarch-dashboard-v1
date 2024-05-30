@@ -460,7 +460,7 @@ class Database:
                 {
                     f'''
                         WITH search_filtered AS (
-                            SELECT DISTINCT product_variation.listing_id AS id, product_variation.extension AS extension
+                            SELECT DISTINCT product_variation.listing_id AS id
                             FROM product_listing INNER JOIN product_variation ON product_variation.listing_id = product_listing.id
                             WHERE product_listing.index @@ to_tsquery('{search + ':*'}') OR product_variation.index @@ to_tsquery('{search + ':*'}')
                         ),
@@ -472,7 +472,7 @@ class Database:
                         {"WITH" if search == "" else ""} tag_filtered AS (
                             {" INTERSECT ".join([
                                 f'''
-                                    SELECT DISTINCT product_variation__tag.listing_id AS id, product_variation__tag.variation_extension AS extension
+                                    SELECT DISTINCT product_variation__tag.listing_id AS id
                                     FROM product_variation__tag
                                     WHERE tag_id = ANY ARRAY[{", ".join([f"'{id}'" for id in ids])}]
                                 ''' for ids in filters.values()
@@ -482,13 +482,12 @@ class Database:
                     else ""
                 }
                 {"WITH" if search == "" and len(filters) == 0 else ""} results AS (
-                    SELECT id, extension, name, subname, description, price, featured
-                    FROM product_listing INNER JOIN product_variation ON product_listing.id = product_variation.listing_id
-                        {"INNER JOIN search_filtered USING(id, extension)" if search != "" else ""}
-                        {"INNER JOIN tag_filtered USING(id, extension)" if len(filters) != 0 else ""}
+                    SELECT id, name, description
+                    FROM product_listing
+                        {"INNER JOIN search_filtered USING(id)" if search != "" else ""}
+                        {"INNER JOIN tag_filtered USING(id)" if len(filters) != 0 else ""}
                 )
-                SELECT DISTINCT id, name, description
-                FROM results;
+                SELECT DISTINCT * FROM results;
             ''')
             results = cls._pygres.fetch()
             return [{key: value for key, value in zip(["id", "name", "category"], result)} for result in results]
