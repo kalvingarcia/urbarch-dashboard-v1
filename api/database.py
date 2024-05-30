@@ -991,28 +991,74 @@ class Database:
     # CUSTOM METHODS
     @classmethod
     def get_custom_list(cls):
-        return cls.__pygres.select("custom_items")
+        try:
+            cls._pygres(f"SELECT id, listing_id, name, description, customer FROM custom_item;")
+            results = cls._pygres.fetch()
+            return [{key: value for key, value in zip(["id", "listing_id", "name", "description", "customer"], result) for result in results}]
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def get_custom(cls, id):
-        return cls._pygres.select("custom_items", where = f"id = '{id}'")[0]
+        try:
+            cls._pygres(f"SELECT id, listing_id, name, description, customer FROM custom_item WHERE id = {id};")
+            result = cls._pygres.fetch()[0]
+            return {key: value for key, value in zip(["id", "listing_id", "name", "description", "customer"], result)}
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def create_custom(cls, data):
-        cls._pygres.insert("custom_items", data)
-        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "listing_id"])
-        cls._complete_action()
+        try:
+            columns = ", ".join(data.keys())
+            values = tuple(data.values())
+            cls._pygres(f"INSERT INTO custom_item({columns}) VALUES {values} RETURNING id;")
+            id = cls._pygres.fetch()[0][0]
+            cls._pygres(f'''
+                UPDATE custom_item
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["listing_id", "name", "description", "customer"]])})
+                WHERE id = '{id}';
+            ''')
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
+        
 
     @classmethod
     def update_custom(cls, id, data):
-        cls._pygres.update("custom_items", data, where = f"id = '{id}'")
-        cls._pygres.regin("custom_items", columns = ["name", "description", "customer", "listing_id"])
-        cls._complete_action()
+        try:
+            cls._pygres(f'''
+                UPDATE custom_item
+                SET {", ".join([f"{key} = '{value}'" for key, value in data.items()])}
+                WHERE id = '{id}' RETURNING id;
+            ''')
+            id = cls._pygres.fetch()[0][0]
+            cls._pygres(f'''
+                UPDATE custom_item
+                SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["listing_id", "name", "description", "customer"]])})
+                WHERE id = '{id}';
+            ''')
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def delete_custom(cls, id):
-        cls._pygres.delete("custom_items", where = f"id = '{id}'")
-        cls._complete_action()
+        try:
+            cls._pygres(f"DELETE FROM custom_item WHERE id = {id};")
+            cls._complete_action()
+        except QueryError as error:
+            print("Error while attempting to update product: ", error)
+            cls._error()
+            return error
 
     @classmethod
     def disconnect(cls):
