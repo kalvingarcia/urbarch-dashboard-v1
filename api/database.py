@@ -550,7 +550,7 @@ class Database:
             for variation in variations:
                 tags = variation.pop("tags")
 
-                variation['listing_id'] = data['id']
+                variation['listing_id'] = id
                 variation["overview"] = json.dumps(variation["overview"])
 
                 columns = ", ".join(variation.keys())
@@ -566,7 +566,7 @@ class Database:
                 for tag in tags:
                     cls._pygres(f'''
                         INSERT INTO product_variation__tag(listing_id, variation_extension, tag_id) 
-                        VALUES {(data['id'], variation['extension'], tag)};
+                        VALUES {(id, variation['extension'], tag)};
                     ''')
 
             cls._complete_action()
@@ -576,20 +576,20 @@ class Database:
             return error
 
     @classmethod
-    def update_product(cls, id, data):
+    def update_product(cls, old_id, data):
         try:
             variations = data.pop("variations")
 
             cls._pygres(f'''
                 UPDATE product_listing
                 SET {", ".join([f"{key} = '{value}'" for key, value in data.items()])}
-                WHERE id = '{id}' RETURNING id;
+                WHERE id = '{old_id}' RETURNING id;
             ''')
-            id = cls._pygres.fetch()[0][0]
+            new_id = cls._pygres.fetch()[0][0]
             cls._pygres(f'''
                 UPDATE product_listing
                 SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["id", "name", "description"]])})
-                WHERE id = '{id}';
+                WHERE id = '{new_id}';
             ''')
 
             extensions = set()
@@ -597,18 +597,18 @@ class Database:
                 tags = variation.pop("tags")
                 extensions.add(variation["extension"])
 
-                variation['listing_id'] = data['id']
+                variation['listing_id'] = new_id
                 variation["overview"] = json.dumps(variation["overview"])
 
                 cls._pygres(f'''
-                    SELECT listing_id, extension FROM product_variation 
-                    WHERE listing_id = '{data["id"]}' AND extension = '{variation["extension"]}';
+                    SELECT * FROM product_variation 
+                    WHERE listing_id = '{old_id}' AND extension = '{variation["extension"]}';
                 ''')
                 if len(cls._pygres.fetch()) > 0:
                     cls._pygres(f'''
                         UPDATE product_variation
                         SET {", ".join([f"{key} = '{value}'" for key, value in variation.items()])}
-                        WHERE listing_id = '{data["id"]}' AND extension = '{variation["extension"]}'
+                        WHERE listing_id = '{old_id}' AND extension = '{variation["extension"]}'
                         RETURNING extension;
                     ''')
                 else:
@@ -620,35 +620,41 @@ class Database:
                 cls._pygres(f'''
                     UPDATE product_variation
                     SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["subname"]])})
-                    WHERE listing_id = '{id}' AND extension = '{extension}';
+                    WHERE listing_id = '{new_id}' AND extension = '{extension}';
                 ''')
 
                 for tag in tags:
                     cls._pygres(f'''
                         SELECT * FROM product_variation__tag
-                        WHERE listing_id = '{data['id']}' AND variation_extension = '{variation['extension']}' AND tag_id = '{tag}';
+                        WHERE listing_id = '{old_id}' AND variation_extension = '{variation['extension']}' AND tag_id = '{tag}';
                     ''')
                     if len(cls._pygres.fetch()) == 0:
                         cls._pygres(f'''
                             INSERT INTO product_variation__tag(listing_id, variation_extension, tag_id) 
-                            VALUES {(data['id'], variation['extension'], tag)};
+                            VALUES {(new_id, variation['extension'], tag)};
                         ''')
                 cls._pygres(f'''
+                    UPDATE product_variation__tag
+                    SET listing_id = '{new_id}'
+                    WHERE listing_id = '{old_id}';
+                ''')
+                cls._pygres(f'''
                     DELETE FROM product_variation__tag
-                    WHERE listing_id = '{data["id"]}' AND variation_extension = '{extension}'
+                    WHERE listing_id = '{new_id}' AND variation_extension = '{extension}'
                         AND tag_id NOT IN ({", ".join([f"'{tag}'" for tag in tags])});
                 ''')
 
             # clean up if extensions get updated
             # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
             # but i like to make things hard i guess
+            print(extensions)
             cls._pygres(f'''
                 DELETE FROM product_variation
-                WHERE listing_id = '{data["id"]}' AND extension != ANY ARRAY[{", ".join([f"'{extension}'" for extension in extensions])}];
+                WHERE listing_id = '{old_id}' AND NOT extension = ANY ARRAY[{", ".join([f"'{extension}'" for extension in extensions])}];
             ''')
             cls._pygres(f'''
                 DELETE FROM product_variation__tag
-                WHERE listing_id = '{data["id"]}' AND variation_extension != ANY ARRAY[{", ".join([f"'{extension}'" for extension in extensions])}];
+                WHERE listing_id = '{new_id}' AND NOT variation_extension = ANY ARRAY[{", ".join([f"'{extension}'" for extension in extensions])}];
             ''')
 
             cls._complete_action()
