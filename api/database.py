@@ -481,26 +481,17 @@ class Database:
                     ''' if len(filters) != 0
                     else ""
                 }
-                {"WITH" if search == "" and len(filters) == 0 else ""} categories AS (
-                    /* Create a table with the tag name and listing id */
-                    SELECT DISTINCT listing_id AS id, tag.name AS category
-                    FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id  /* First we combine the tag and tag category information */
-                        INNER JOIN product_variation__tag ON product_variation__tag.tag_id = tag.id /* Then we combine the tags specific to the variations we have */
-                    WHERE tag_category.name = 'Class'
-                ), results AS (
-                    SELECT id, extension, name, subname, category, price, featured
+                {"WITH" if search == "" and len(filters) == 0 else ""} results AS (
+                    SELECT id, extension, name, subname, description, price, featured
                     FROM product_listing INNER JOIN product_variation ON product_listing.id = product_variation.listing_id
-                        JOIN categories USING(id)
                         {"INNER JOIN search_filtered USING(id, extension)" if search != "" else ""}
                         {"INNER JOIN tag_filtered USING(id, extension)" if len(filters) != 0 else ""}
                 )
-                SELECT DISTINCT id, name, category
+                SELECT DISTINCT id, name, description
                 FROM results;
             ''')
             results = cls._pygres.fetch()
-            cls._pygres("SELECT id, name, description FROM product_listing;")
-            all = cls._pygres.fetch()
-            return [{key: value for key, value in zip(["id", "name", "category"], result)} for result in all]
+            return [{key: value for key, value in zip(["id", "name", "category"], result)} for result in results]
         except QueryError as error:
             print("Error while attempting to search database: " + str(error))
             cls._error()
