@@ -719,12 +719,13 @@ class Database:
 
             columns = ", ".join(data.keys())
             values = tuple(data.values())
-            cls._pygres(f"INSERT INTO instock_listing({columns}) VALUES {values};")
+            cls._pygres(f"INSERT INTO instock_listing({columns}) VALUES {values} RETURNING id;")
+            id = cls._pygres.fetch()[0][0]
 
             for item in items:
                 tags = item.pop("tags")
 
-                item['listing_id'] = data['id']
+                item['listing_id'] = id
                 item["overview"] = json.dumps(item["overview"])
 
                 columns = ', '.join(item.keys())
@@ -734,7 +735,7 @@ class Database:
                 for tag in tags:
                     cls._pygres(f'''
                         INSERT INTO instock_item__tag(listing_id, item_serial, tag_id) 
-                        {(data['id'], item['serial'], tag)};
+                        {(id, item['serial'], tag)};
                     ''')
 
             cls._complete_action()
@@ -759,12 +760,12 @@ class Database:
                 tags = item.pop("tags")
                 serials.add(item["serial"])
 
-                item['listing_id'] = data['id']
+                item['listing_id'] = id
                 item["overview"] = json.dumps(item["overview"])
 
                 cls._pygres(f'''
                     SELECT * FROM instock_items
-                    WHERE listing_id = '{data["id"]}' AND serial = '{item["serial"]};
+                    WHERE listing_id = '{id}' AND serial = '{item["serial"]};
                 ''')
                 if len(cls._pygres.fetch()) > 0:
                     cls._pygres(f'''
@@ -780,16 +781,16 @@ class Database:
                 for tag in tags:
                     cls._pygres(f'''
                         SELECT * FROM instock_item__tag
-                        WHERE listing_id = '{data['id']}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}';
+                        WHERE listing_id = '{id}' AND item_serial = '{item['serial']}' AND tag_id = '{tag}';
                     ''')
                     if len(cls._pygres.fetch()) == 0:
                         cls._pygres(f'''
                             INSERT INTO instock_item__tag(listing_id, item_serial, tag_id) 
-                            VALUES {(data['id'], item['serial'], tag)};
+                            VALUES {(id, item['serial'], tag)};
                         ''')
                 cls._pygres(f'''
                     DELETE FROM instock_item__tag
-                    WHERE listing_id = '{data["id"]}' AND item_serial = '{item["serial"]}'
+                    WHERE listing_id = '{id}' AND item_serial = '{item["serial"]}'
                         AND tag_id NOT IN ({", ".join([f"'{tag}'" for tag in tags])});
                 ''')
 
@@ -798,11 +799,11 @@ class Database:
             # but i like to make things hard i guess
             cls._pygres(f'''
                 DELETE FROM instock_item
-                WHERE listing_id = '{data["id"]}' AND serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
+                WHERE listing_id = '{id}' AND serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
             ''')
             cls._pygres(f'''
                 DELETE FROM instock_item__tag
-                WHERE listing_id = '{data["id"]}' AND item_serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
+                WHERE listing_id = '{id}' AND item_serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
             ''')
 
             cls._complete_action()
