@@ -502,12 +502,9 @@ class Database:
         try:
             cls._pygres(f'''
                 WITH variations AS (
-                    SELECT extension, subname, price, overview, (
-                        SELECT COALESCE(json_agg(json_build_object(
-                            'id', tag.id,
-                            'name', tag.name,
-                            'category_id', tag_category.id
-                        )), '[]') FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id
+                    SELECT extension, subname, featured, price, display, overview, (
+                        SELECT COALESCE(ARRAY_AGG(tag.id), '{{}}')
+                        FROM tag INNER JOIN tag_category ON tag.category_id = tag_category.id
                             INNER JOIN product_variation__tag ON product_variation__tag.tag_id = tag.id
                         WHERE product_variation__tag.listing_id = '{id}' AND product_variation__tag.variation_extension = extension
                     ) AS tags
@@ -517,7 +514,9 @@ class Database:
                     SELECT COALESCE(json_agg(json_build_object(
                         'extension', extension,
                         'subname', subname,
+                        'featured', featured,
                         'price', price,
+                        'display', display,
                         'overview', overview,
                         'tags', tags
                     )), '[]') FROM variations
@@ -526,6 +525,7 @@ class Database:
             ''')
 
             result = cls._pygres.fetch()[0]
+            print(result)
             return {key: value for key, value in zip(["id", "name", "description", "variations"], result)}
         except QueryError as error:
             print("Error while attempting to search database: " + str(error))
@@ -604,7 +604,8 @@ class Database:
                     SELECT * FROM product_variation 
                     WHERE listing_id = '{old_id}' AND extension = '{variation["extension"]}';
                 ''')
-                if len(cls._pygres.fetch()) > 0:
+                print(length := len(cls._pygres.fetch()))
+                if length > 0:
                     cls._pygres(f'''
                         UPDATE product_variation
                         SET {", ".join([f"{key} = '{value}'" for key, value in variation.items()])}
@@ -615,8 +616,8 @@ class Database:
                     columns = ", ".join(variation.keys())
                     values = tuple(variation.values())
                     cls._pygres(f"INSERT INTO product_variation({columns}) VALUES {values} RETURNING extension;")
-                extension =  cls._pygres.fetch()[0][0]
 
+                extension =  cls._pygres.fetch()[0][0]
                 cls._pygres(f'''
                     UPDATE product_variation
                     SET index = to_tsvector('english', {" || ' ' || ".join([f"COALESCE({column}, '')" for column in ["subname"]])})
@@ -647,7 +648,6 @@ class Database:
             # clean up if extensions get updated
             # this wouldn't be required if rows have a unique identifier that could be used to update the row rather than accidentally inserting new data
             # but i like to make things hard i guess
-            print(extensions)
             cls._pygres(f'''
                 DELETE FROM product_variation
                 WHERE listing_id = '{old_id}' AND NOT extension = ANY ARRAY[{", ".join([f"'{extension}'" for extension in extensions])}];
