@@ -140,8 +140,9 @@ class TagForm(SearchForm):
     def create_tag(self):
         CreateTagForm().open()
 
-    def prefill(self, data):
-        for tag in data:
+    def prefill(self, tags):
+        tags = [Database.get_tag(tag) for tag in tags]
+        for tag in tags:
             self.append(tag["id"], tag["name"])
 
 class ProductVariationForm(SearchForm):
