@@ -358,6 +358,7 @@ class ProductForm(FormStructure, MDBoxLayout):
         self.adaptive_height = True
 
     def __reset(self):
+        self.__old_product_id = None
         self.variation_number = 1
 
     def default(self):
