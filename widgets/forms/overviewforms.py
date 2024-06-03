@@ -54,7 +54,7 @@ class OptionsForm(FormStructure, MDBoxLayout):
                 Form(
                     CheckboxInput(
                         label = "Linked",
-                        value = "link",
+                        form_id = "link",
                         size_hint_x = 0.25
                     ),
                     TextInput(
@@ -82,13 +82,17 @@ class OptionsForm(FormStructure, MDBoxLayout):
 
     def prefill(self, data):
         for key, value in data.items():
-            self.add_form({"option_name": key, "option_content": value})
-
+            if isinstance(value, dict):
+                print(value['link'])
+                self.add_form({"option_name": key, "link": value["link"], "link_name": value["link_name"], "option_content": value["content"]})
+            else:
+                self.add_form({"option_name": key,  "option_content": value})
+    
     def submit(self):
         submission = {}
         for form in self.__forms.children:
             value = form.submit()[1]
-            submission[value["option_name"]] = value["option_content"]
+            submission[value["option_name"]] = {"link": value["link"], "link_name": value["link_name"], "content": value["option_content"]}
         return self.form_id, submission 
 
 class FinishesForm(TableForm):
