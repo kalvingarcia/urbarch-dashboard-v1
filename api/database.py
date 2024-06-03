@@ -525,7 +525,6 @@ class Database:
             ''')
 
             result = cls._pygres.fetch()[0]
-            print(result)
             return {key: value for key, value in zip(["id", "name", "description", "variations"], result)}
         except QueryError as error:
             print("Error while attempting to search database: " + str(error))
@@ -604,8 +603,7 @@ class Database:
                     SELECT * FROM product_variation 
                     WHERE listing_id = '{old_id}' AND extension = '{variation["extension"]}';
                 ''')
-                print(length := len(cls._pygres.fetch()))
-                if length > 0:
+                if len(cls._pygres.fetch()) > 0:
                     cls._pygres(f'''
                         UPDATE product_variation
                         SET {", ".join([f"{key} = '{value}'" for key, value in variation.items()])}
