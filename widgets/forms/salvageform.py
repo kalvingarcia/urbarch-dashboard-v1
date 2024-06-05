@@ -6,7 +6,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDIconButton
 from api.database import Database
 from kivymd.uix.textfield import MDTextFieldHintText, MDTextFieldHelperText, MDTextFieldLeadingIcon
-from widgets.forms.form import FormStructure, Form, TextInput, NumberInput, SwitchInput, CheckboxInput, CheckGroup, TabForm
+from widgets.forms.form import FormStructure, Form, TextInput, NumberInput, SwitchInput, CheckboxInput, CheckGroup, TabForm, DropdownInput
 from widgets.forms.overviewforms import TagForm
 
 class ItemForm(FormStructure, MDScrollView, ThemableBehavior):
@@ -56,7 +56,8 @@ class ItemForm(FormStructure, MDScrollView, ThemableBehavior):
                 Form(
                     NumberInput(
                         MDTextFieldHintText(text = "Item Era"),
-                        form_id = "year"
+                        form_id = "year",
+                        is_int = True
                     ),
                     TextInput(
                         MDTextFieldHintText(text = "Item Location"),
@@ -79,22 +80,72 @@ class ItemForm(FormStructure, MDScrollView, ThemableBehavior):
             Form(
                 MDLabel(text = "Specifications", adaptive_size = True),
                 Form(
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Height"),
-                        form_id = "height"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Item Height"),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "inches", "text": "in"},
+                                {"value": "feet", "text": "ft"},
+                                {"value": "milimeters", "text": "mm"},
+                                {"value": "centimeters", "text": "cm"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "height",
+                        adaptive_height = True
                     ),
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Width"),
-                        form_id = "width"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Item Width"),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "inches", "text": "in"},
+                                {"value": "feet", "text": "ft"},
+                                {"value": "milimeters", "text": "mm"},
+                                {"value": "centimeters", "text": "cm"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "width",
+                        adaptive_height = True
                     ),
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Depth"),
-                        MDTextFieldHelperText(text = "For wallmounted products this would be the projection."),
-                        form_id = "depth"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Item Depth"),
+                            MDTextFieldHelperText(text = "For wallmounted products this would be the projection."),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "inches", "text": "in"},
+                                {"value": "feet", "text": "ft"},
+                                {"value": "milimeters", "text": "mm"},
+                                {"value": "centimeters", "text": "cm"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "depth",
+                        adaptive_height = True
                     ),
-                    NumberInput(
-                        MDTextFieldHintText(text = "Variation Weight"),
-                        form_id = "weight"
+                    Form(
+                        NumberInput(
+                            MDTextFieldHintText(text = "Item Weight"),
+                            form_id = "measurement"
+                        ),
+                        DropdownInput(
+                            data = [
+                                {"value": "pounds", "text": "lb"},
+                                {"value": "kilograms", "text": "kg"}
+                            ],
+                            form_id = "unit"
+                        ),
+                        form_id = "weight",
+                        adaptive_height = True
                     ),
                     form_id = "specifications",
                     orientation = "vertical",
@@ -256,10 +307,8 @@ class SalvageForm(FormStructure, MDBoxLayout):
     def submit(self):
         if self.__old_salvage_id:
             Database.update_salvage(self.__old_salvage_id, self.__form.submit()[1])
-            print(self.__form.submit()[1])
         else:
             Database.create_salvage(self.__form.submit()[1])
-            print(self.__form.submit()[1])
         self.__old_salvage_id = None
         if self.__on_submit:
             self.__on_submit()
