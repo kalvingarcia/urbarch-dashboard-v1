@@ -689,11 +689,8 @@ class Database:
             cls._pygres(f'''
                 WITH items AS (
                     SELECT serial, display, overview, (
-                        SELECT COALESCE(json_agg(json_build_object(
-                            'id', tag.id,
-                            'name', tag.name,
-                            'category_id', tag_category.id
-                        )), '[]') FROM tag INNER JOIN instock_item__tag ON instock_item__tag.tag_id = tag.id
+                        SELECT COALESCE(ARRAY_AGG(tag.id), '{{}}')
+                        FROM tag INNER JOIN instock_item__tag ON instock_item__tag.tag_id = tag.id
                         WHERE instock_item__tag.listing_id = '{id}' AND instock_item__tag.item_serial = serial
                     ) AS tags
                     FROM instock_item WHERE listing_id = '{id}'
@@ -738,7 +735,7 @@ class Database:
                 for tag in tags:
                     cls._pygres(f'''
                         INSERT INTO instock_item__tag(listing_id, item_serial, tag_id) 
-                        {(id, item['serial'], tag)};
+                        VALUES {(id, item['serial'], tag)};
                     ''')
 
             cls._complete_action()
@@ -831,7 +828,7 @@ class Database:
         try:
             cls._pygres(f"SELECT id, name, description FROM salvage_listing;")
             results = cls._pygres.fetch()
-            return [{key: value for key, value in zip(["id", "extension", "sale"], result)} for result in results]
+            return [{key: value for key, value in zip(["id", "name", "description"], result)} for result in results]
         except QueryError as error:
             print("Error while attempting to get stock list: ", error)
             cls._error()
@@ -843,11 +840,8 @@ class Database:
             cls._pygres(f'''
                 WITH items AS (
                     SELECT serial, price, display, overview, (
-                        SELECT COALESCE(json_agg(json_build_object(
-                            'id', tag.id,
-                            'name', tag.name,
-                            'category_id', tag_category.id
-                        )), '[]') FROM tag INNER JOIN salvage_item__tag ON salvage_item__tag.tag_id = tag.id
+                        SELECT COALESCE(ARRAY_AGG(tag.id), '{{}}')
+                        FROM tag INNER JOIN salvage_item__tag ON salvage_item__tag.tag_id = tag.id
                         WHERE salvage_item__tag.listing_id = '{id}' AND salvage_item__tag.item_serial = serial
                     ) AS tags
                     FROM salvage_item WHERE listing_id = '{id}'
@@ -855,7 +849,7 @@ class Database:
                 SELECT id, name, description, (
                     SELECT COALESCE(json_agg(json_build_object(
                         'serial',items.serial,
-                        'price', items.price
+                        'price', items.price,
                         'display', items.display,
                         'overview', items.overview,
                         'tags', items.tags
@@ -863,8 +857,8 @@ class Database:
                 ) AS items
                 FROM salvage_listing WHERE id = '{id}';
             ''')
-            result = cls._pygres.fetch()
-            return {key: value for key, value in zip(["id", "sale", "price", "listing_id", "variation_extension", "items"], result)}
+            result = cls._pygres.fetch()[0]
+            return {key: value for key, value in zip(["id", "name", "description", "items"], result)}
         except QueryError as error:
             print("Error while attempting to get stock listing: ", error)
             cls._error()
@@ -891,14 +885,14 @@ class Database:
                 item['listing_id'] = data['id']
                 item["overview"] = json.dumps(item["overview"])
                 
-                columns = ", ".join(variation.keys())
-                values = tuple(variation.values())
+                columns = ", ".join(item.keys())
+                values = tuple(item.values())
                 cls._pygres(f"INSERT INTO salvage_item({columns}) VALUES {values};")
 
                 for tag in tags:
                     cls._pygres(f'''
                         INSERT INTO salvage_item__tag(listing_id, item_serial, tag_id) 
-                        {(data['id'], item['serial'], tag)};
+                        VALUES {(data['id'], item['serial'], tag)};
                     ''')
 
             cls._complete_action()
@@ -910,7 +904,7 @@ class Database:
     @classmethod
     def update_salvage(cls, id, data):
         try:
-            items = data.pop("item")
+            items = data.pop("items")
 
             cls._pygres(f'''
                 UPDATE salvage_listing
@@ -934,12 +928,12 @@ class Database:
 
                 cls._pygres(f'''
                     SELECT * FROM salvage_item
-                    WHERE listing_id = '{id}' AND serial = '{item["serial"]};
+                    WHERE listing_id = '{id}' AND serial = '{item["serial"]}';
                 ''')
                 if len(cls._pygres.fetch()) > 0:
                     cls._pygres(f'''
                         UPDATE salvage_item
-                        SET {", ".join([f"{key} = {value}" for key, value in item.items()])}
+                        SET {", ".join([f"{key} = '{value}'" for key, value in item.items()])}
                         WHERE listing_id = '{item['listing_id']}' AND serial = '{item['serial']}';
                     ''')
                 else:
@@ -972,7 +966,7 @@ class Database:
             ''')
             cls._pygres(f'''
                 DELETE FROM salvage_item__tag
-                WHERE listing_id = '{data["id"]}' AND variation_extension != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
+                WHERE listing_id = '{data["id"]}' AND item_serial != ANY ARRAY[{", ".join([f"'{serial}'" for serial in serials])}];
             ''')
 
             cls._complete_action()
