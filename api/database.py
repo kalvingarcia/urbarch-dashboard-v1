@@ -989,9 +989,9 @@ class Database:
     @classmethod
     def get_custom_list(cls):
         try:
-            cls._pygres(f"SELECT id, listing_id, name, description, customer FROM custom_item;")
+            cls._pygres(f"SELECT id, listing_id, name, description FROM custom_item;")
             results = cls._pygres.fetch()
-            return [{key: value for key, value in zip(["id", "listing_id", "name", "description", "customer"], result) for result in results}]
+            return [{key: value for key, value in zip(["id", "listing_id", "name", "description"], result)} for result in results]
         except QueryError as error:
             print("Error while attempting to update product: ", error)
             cls._error()

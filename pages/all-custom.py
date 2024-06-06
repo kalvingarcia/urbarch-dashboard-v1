@@ -20,7 +20,7 @@ class AllCustom(MDScreen):
         home.bind(on_press = lambda *args: self._switch("home"))
 
         self.data_window = DataWindow(
-            DataHeader(columns = ["id", "name", "description", "product_listing", "variation_extension"]
+            DataHeader(columns = ["id", "name", "description", "listing_id"]
         ))
         self.add_widget(MDBoxLayout(
             MDBoxLayout(
