@@ -20,11 +20,11 @@ class CustomForm(FormStructure, MDBoxLayout):
                 Form(
                     TextInput(
                         MDTextFieldHintText(text = "Custom Name"),
-                        MDTextFieldHelperText(text = "Example: \"Incustom Greek Keys\""),
+                        MDTextFieldHelperText(text = "Example: \"Custom Greek Keys\""),
                         form_id = "name",
                         size_hint_x = 0.6,
                     ),
-                    SwitchInput("Display", form_id = "display"),
+                    SwitchInput(label = "Display", form_id = "display", size_hint_x = 0.25),
                     adaptive_height = True
                 ),
                 TextInput(
@@ -35,13 +35,13 @@ class CustomForm(FormStructure, MDBoxLayout):
                 Form(
                     TextInput(
                         MDTextFieldHintText(text = "Product ID"),
-                        MDTextFieldHelperText(text = "Example: for \"Incustom Greek Keys\", it would be \"_____\""),
-                        form_id = "product_id",
+                        MDTextFieldHelperText(text = "Example: for \"Custom Greek Keys\", it would be \"_____\""),
+                        form_id = "listing_id",
                         size_hint_x = 0.6,
                     ),
                     TextInput(
                         MDTextFieldHintText(text = "Variation Extension"),
-                        MDTextFieldHelperText(text = "Example: for \"Incustom Greek Keys\", it would be \"_____\""),
+                        MDTextFieldHelperText(text = "Example: for \"Custom Greek Keys\", it would be \"_____\""),
                         form_id = "variation_extension",
                         size_hint_x = 0.4,
                     ),
