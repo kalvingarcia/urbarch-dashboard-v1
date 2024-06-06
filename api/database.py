@@ -166,7 +166,7 @@ class Database:
                 description TEXT,
                 customer VARCHAR(255),
                 display BOOL,
-                listing_id VARCHAR(10) REFERENCES product_listing(id) ON DELETE CASCADE ON UPDATE CASCADE,
+                listing_id VARCHAR(10),
                 variation_extension VARCHAR(10)
             );
         ''')
