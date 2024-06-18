@@ -2,3 +2,5 @@
 
 /sessions
 /demos
+
+**/__pycache__
