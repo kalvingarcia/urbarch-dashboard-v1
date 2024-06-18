@@ -15,7 +15,7 @@ class AllTags(MDScreen):
         super(AllTags, self).__init__(**kwargs)
         self.name = "all-tags"
 
-        self.tag_form = TagForm(on_submit = lambda: self.update())
+        self.tag_form = CreateTagForm(on_submit = lambda: self.update())
 
         home = MDIconButton(
             icon = "home",
