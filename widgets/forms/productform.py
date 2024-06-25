@@ -209,6 +209,11 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
                     MDTextFieldHelperText(text = "Any additional information that needs to be included."),
                     form_id = "notes"
                 ),
+                TextInput(
+                    MDTextFieldHintText(text = "Real UAID"),
+                    MDTextFieldHelperText(text = "Some items are variations of other with their own ID."),
+                    form_id = "real_id"
+                ),
                 orientation = "vertical",
                 size_hint_x = 0.5,
                 adaptive_height = True,
@@ -234,7 +239,7 @@ class VariationForm(FormStructure, MDScrollView, ThemableBehavior):
         form_data = self.__form.submit()[1]
 
         overview = {}
-        for key in ["finishes", "options", "bulb", "replacements", "ul", "specifications", "notes"]:
+        for key in ["finishes", "options", "bulb", "replacements", "ul", "specifications", "notes", "real_id"]:
             overview[key] = form_data.pop(key)
         form_data["overview"] = overview
 
