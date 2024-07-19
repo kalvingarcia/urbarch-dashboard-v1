@@ -177,8 +177,8 @@ class NumberInput(FormStructure, MDTextField):
     def set_text(self, instance, text: str):
         # This section of code is used to check and remove non-numerical characters
         new_text = ""
-        for c in text:
-            if c.isdigit() or (c == "." and not self.__is_int):
+        for (index, c) in enumerate(text):
+            if (c == '-' and index == 0) or c.isdigit() or (c == "." and not self.__is_int):
                 new_text += c
 
         super(NumberInput, self).set_text(instance, new_text)
